@@ -1,0 +1,23 @@
+name: Build MedGen AI APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build APK
+        uses: ArtemKulyk/buildozer-action@v1
+        with:
+          command: buildozer android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MedGenAI-APK
+          path: bin/*.apk
