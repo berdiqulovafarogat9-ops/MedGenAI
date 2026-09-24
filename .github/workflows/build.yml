@@ -36,10 +36,20 @@ jobs:
           python -m pip install buildozer cython
 
       - name: Build APK
-        run: buildozer -v android debug
+        run: |
+          buildozer -v android debug
+
+      - name: Show build files
+        if: always()
+        run: |
+          echo "=== BIN ==="
+          ls -lah bin || true
+          echo "=== DIST ==="
+          find . -name "*.apk" -type f -print || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MedGenAI-APK
           path: bin/*.apk
+          if-no-files-found: error
