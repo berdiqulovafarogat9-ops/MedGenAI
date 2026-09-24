@@ -2,8 +2,9 @@
 title = MedGen AI
 package.name = medgenai
 package.domain = org.medgenai
+
 source.dir = .
-source.include_exts = py,json,png,jpg
+source.include_exts = py,json,png,jpg,kv
 version = 1.0
 
 requirements = python3,kivy
