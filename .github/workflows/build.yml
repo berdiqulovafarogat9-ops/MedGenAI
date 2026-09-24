@@ -26,9 +26,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip autoconf automake libtool \
-            pkg-config zlib1g-dev libncurses5-dev \
-            libncursesw5-dev cmake libffi-dev libssl-dev
+            git \
+            zip \
+            unzip \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            cmake \
+            libffi-dev \
+            libssl-dev
 
       - name: Install Buildozer
         run: |
@@ -37,19 +47,51 @@ jobs:
 
       - name: Build APK
         run: |
-          buildozer -v android debug
+          set +e
+          buildozer -v android debug 2>&1 | tee build.log
+          STATUS=${PIPESTATUS[0]}
+
+          echo "========================================"
+          echo "          REAL BUILD ERRORS"
+          echo "========================================"
+
+          grep -nEi \
+            "error:|exception|traceback|failed|fatal|command failed" \
+            build.log | tail -100 || true
+
+          echo "========================================"
+          echo "          LAST 150 LOG LINES"
+          echo "========================================"
+
+          tail -150 build.log || true
+
+          echo "========================================"
+          echo "          BUILD STATUS"
+          echo "========================================"
+
+          exit $STATUS
 
       - name: Show build files
         if: always()
         run: |
-          echo "=== BIN ==="
-          ls -lah bin || true
-          echo "=== DIST ==="
+          echo "===== APK FILES ====="
           find . -name "*.apk" -type f -print || true
 
+          echo "===== BIN DIRECTORY ====="
+          ls -lah bin || true
+
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MedGenAI-APK
           path: bin/*.apk
           if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MedGenAI-build-log
+          path: build.log
+          if-no-files-found: warn
