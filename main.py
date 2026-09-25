@@ -363,48 +363,210 @@ class MedGenAI(App):
 
     def drug_discovery(self):
         self.clear()
-        self.page_title("Drug Discovery", "Molecule screening")
+        self.page_title(
+            "Drug Discovery",
+            "Molecule screening & drug-likeness"
+        )
+
         self.workspace.add_widget(Label(
             text="SMILES",
             color=self.hex(MUTED),
             size_hint_y=None,
             height=dp(30)
         ))
+
         entry = TextInput(
             text="CCO",
             multiline=False,
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
             cursor_color=self.hex(TEXT),
+            font_size=16,
             size_hint_y=None,
             height=dp(50)
         )
         self.workspace.add_widget(entry)
         out = self.output()
 
-        def screen(instance):
-            s = entry.text.strip()
-            atoms, i = {}, 0
-            while i < len(s):
-                if s[i].isupper():
-                    a = s[i]; i += 1
-                    if i < len(s) and s[i].islower():
-                        a += s[i]; i += 1
-                    atoms[a] = atoms.get(a, 0) + 1
-                else:
+        def tokenize_smiles(smiles):
+            atoms = []
+            i = 0
+            while i < len(smiles):
+                ch = smiles[i]
+                if ch == "[":
+                    j = smiles.find("]", i + 1)
+                    if j == -1:
+                        raise ValueError("Unclosed bracket in SMILES.")
+                    content = smiles[i + 1:j]
+                    import re
+                    m = re.search(
+                        r"(Cl|Br|Si|Na|Li|Ca|Mg|Al|[A-Z][a-z]?)",
+                        content
+                    )
+                    if not m:
+                        raise ValueError(
+                            f"Unsupported bracket atom: [{content}]"
+                        )
+                    atoms.append(m.group(1))
+                    i = j + 1
+                    continue
+                if ch.isupper():
+                    if (i + 1 < len(smiles) and
+                            smiles[i:i+2] in (
+                                "Cl", "Br", "Si", "Na", "Li",
+                                "Ca", "Mg", "Al")):
+                        atoms.append(smiles[i:i+2])
+                        i += 2
+                    else:
+                        atoms.append(ch)
+                        i += 1
+                    continue
+                if ch in "bcnops":
+                    atoms.append(ch.upper())
                     i += 1
-            c,n,o = atoms.get("C",0), atoms.get("N",0), atoms.get("O",0)
-            h = max(2*c + 2 + n, 0)
-            mw = c*12.011 + h*1.008 + n*14.007 + o*15.999
-            formula = f"C{c}H{h}" + (f"N{n}" if n else "") + (f"O{o}" if o else "")
-            out.text = (
-                "=== DRUG DISCOVERY SCREEN ===\n\n"
-                f"SMILES: {s}\nFormula: {formula}\n"
-                f"Approx. MW: {mw:.3f} g/mol\n"
-                f"MW <= 500: {'PASS' if mw <= 500 else 'FAIL'}\n\n"
-                "Computational filter only."
+                    continue
+                if ch.isdigit() or ch in "()[]=#-+@/.":
+                    i += 1
+                    continue
+                raise ValueError(
+                    f"Unsupported SMILES character: '{ch}'"
+                )
+            return atoms
+
+        def molecular_formula(atoms):
+            counts = {}
+            for atom in atoms:
+                counts[atom] = counts.get(atom, 0) + 1
+            c = counts.get("C", 0)
+            n = counts.get("N", 0)
+            halogens = sum(
+                counts.get(x, 0) for x in ("F", "Cl", "Br", "I")
             )
+            h = max(0, 2*c + 2 + n - halogens)
+            if c == 0:
+                h = max(0, n - halogens)
+            counts["H"] = h
+            order = [
+                "C", "H", "N", "O", "S", "P",
+                "F", "Cl", "Br", "I"
+            ]
+            formula = ""
+            for element in order:
+                count = counts.get(element, 0)
+                if count:
+                    formula += element if count == 1 else f"{element}{count}"
+            for element in sorted(counts):
+                if element not in order and counts[element]:
+                    formula += (
+                        element if counts[element] == 1
+                        else f"{element}{counts[element]}"
+                    )
+            return formula, counts
+
+        def molecular_weight(counts):
+            weights = {
+                "H": 1.008, "C": 12.011, "N": 14.007,
+                "O": 15.999, "F": 18.998, "P": 30.974,
+                "S": 32.06, "Cl": 35.45, "Br": 79.904,
+                "I": 126.904, "Si": 28.085, "Na": 22.990,
+                "Li": 6.941, "Ca": 40.078, "Mg": 24.305,
+                "Al": 26.982
+            }
+            return sum(weights.get(k, 0.0) * v for k, v in counts.items())
+
+        def estimate_hbd_hba(atoms):
+            hbd = atoms.count("N") + atoms.count("O") + atoms.count("S")
+            hba = atoms.count("N") + atoms.count("O") + atoms.count("S")
+            return min(hbd, 8), min(hba, 12)
+
+        def estimate_rotatable_bonds(smiles, atoms):
+            import re
+            explicit_single = len(
+                re.findall(r"(?<![=#])-(?![=#])", smiles)
+            )
+            implicit = max(0, len(atoms) - 1)
+            return max(
+                0,
+                min(12, explicit_single if explicit_single else implicit // 2)
+            )
+
+        def estimate_tpsa(hbd, hba, atoms):
+            return round(
+                17.0 * atoms.count("N")
+                + 17.0 * atoms.count("O")
+                + 25.0 * atoms.count("S"),
+                1
+            )
+
+        def screen(instance):
+            smiles = entry.text.strip()
+            if not smiles:
+                out.text = "SMILES kiriting."
+                return
+            try:
+                atoms = tokenize_smiles(smiles)
+                if not atoms:
+                    raise ValueError("SMILES tarkibida atom topilmadi.")
+                formula, counts = molecular_formula(atoms)
+                mw = molecular_weight(counts)
+                hbd, hba = estimate_hbd_hba(atoms)
+                rot = estimate_rotatable_bonds(smiles, atoms)
+                tpsa = estimate_tpsa(hbd, hba, atoms)
+                checks = {
+                    "Molecular weight <= 500": mw <= 500,
+                    "H-bond donors <= 5": hbd <= 5,
+                    "H-bond acceptors <= 10": hba <= 10,
+                    "Rotatable bonds <= 10": rot <= 10,
+                    "Approx. TPSA <= 140": tpsa <= 140,
+                }
+                passed = sum(checks.values())
+                lines = [
+                    "=== DRUG DISCOVERY SCREEN ===", "",
+                    f"SMILES: {smiles}",
+                    f"Formula: {formula}",
+                    f"Approx. Molecular Weight: {mw:.3f} g/mol",
+                    f"H-bond Donors (HBD): {hbd}",
+                    f"H-bond Acceptors (HBA): {hba}",
+                    f"Approx. Rotatable Bonds: {rot}",
+                    f"Approx. TPSA: {tpsa:.1f} Å²", "",
+                    "=== FILTERS ===",
+                ]
+                for name, ok in checks.items():
+                    lines.append(f"{'PASS' if ok else 'FAIL'}  {name}")
+                lines.extend([
+                    "",
+                    f"Filters passed: {passed}/{len(checks)}", "",
+                    "Interpretation:",
+                    "Computational screening only.",
+                    "It is not a clinical efficacy, safety, or toxicity prediction.",
+                    "",
+                    "Note: descriptors marked 'Approx.' use a lightweight",
+                    "built-in estimator and are not a substitute for RDKit."
+                ])
+                out.text = "\n".join(lines)
+            except Exception as ex:
+                self.show_error("Drug Discovery", ex)
+
+        def save_report(instance):
+            try:
+                import os
+                path = os.path.join(
+                    self.user_data_dir,
+                    "drug_discovery_report.txt"
+                )
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(out.text)
+                out.text += f"\n\nSaved: {path}"
+            except Exception as ex:
+                self.show_error("Save report", ex)
+
+        def clear_fields(instance):
+            entry.text = ""
+            out.text = "SMILES maydoniga molekula kiriting."
+
         self.button("SCREEN MOLECULE", screen)
+        self.button("SAVE REPORT", save_report)
+        self.button("CLEAR", clear_fields)
 
     def virtual_laboratory(self):
         self.clear()
