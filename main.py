@@ -108,7 +108,7 @@ class MedGenAI(App):
         )
         def safe_command(instance):
             try:
-                command(instance)
+                command()
             except Exception as ex:
                 self.show_error("Navigation", ex)
         b.bind(on_release=safe_command)
