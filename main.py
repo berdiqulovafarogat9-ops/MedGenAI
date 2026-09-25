@@ -19,12 +19,14 @@ ACCENT = "#38BDF8"
 TEXT = "#EAF4FF"
 MUTED = "#8FA8BC"
 
-HISTORY_FILE = "/storage/emulated/0/medgen_history.json"
+HISTORY_FILE = "medgen_history.json"
 
 
 class MedGenAI(App):
 
     def build(self):
+        global HISTORY_FILE
+        HISTORY_FILE = os.path.join(self.user_data_dir, "medgen_history.json")
         self.title = "MedGen AI"
 
         root = BoxLayout(orientation="horizontal")
@@ -47,8 +49,7 @@ class MedGenAI(App):
         ))
 
         self.add_nav("Dashboard", self.dashboard)
-        self.add_nav("Bioinformatics",
-                     lambda x: self.placeholder("Bioinformatics"))
+        self.add_nav("Bioinformatics", self.bioinformatics)
         self.add_nav("AI Structure Prediction",
                      self.structure_prediction)
         self.add_nav("PDB Structure Analysis",
@@ -60,12 +61,9 @@ class MedGenAI(App):
                      self.ml_ranking_report)
         self.add_nav("Molecular Analysis",
                      self.molecular)
-        self.add_nav("Drug Discovery",
-                     lambda x: self.placeholder("Drug Discovery"))
-        self.add_nav("Virtual Laboratory",
-                     lambda x: self.placeholder("Virtual Laboratory"))
-        self.add_nav("Research Assistant",
-                     lambda x: self.placeholder("Research Assistant"))
+        self.add_nav("Drug Discovery", self.drug_discovery)
+        self.add_nav("Virtual Laboratory", self.virtual_laboratory)
+        self.add_nav("Research Assistant", self.research_assistant)
         self.add_nav("Results & History",
                      self.results_history)
 
@@ -159,14 +157,136 @@ class MedGenAI(App):
             height=dp(50)
         ))
 
-    def placeholder(self, name):
+    def bioinformatics(self):
         self.clear()
-        self.page_title(name, "Module")
+        self.page_title("Bioinformatics", "Sequence utilities")
         self.workspace.add_widget(Label(
-            text="Module ready for integration.",
+            text="DNA/RNA sequence",
             color=self.hex(MUTED),
-            font_size=15
+            size_hint_y=None,
+            height=dp(30)
         ))
+        seq = TextInput(
+            text="ATGCGTACGTAG",
+            multiline=True,
+            background_color=self.hex(INPUT),
+            foreground_color=self.hex(TEXT),
+            cursor_color=self.hex(TEXT),
+            font_size=15
+        )
+        self.workspace.add_widget(seq)
+        out = self.output()
+
+        def analyze(instance):
+            s = "".join(seq.text.upper().split())
+            valid = bool(s) and all(c in "ACGTN" for c in s)
+            a,t,g,c,n = (s.count(x) for x in "ATGCN")
+            gc = ((g+c)/len(s)*100) if s else 0
+            out.text = (
+                "=== BIOINFORMATICS ===\n\n"
+                f"Length: {len(s)} nt\n"
+                f"A: {a}  T: {t}  G: {g}  C: {c}  N: {n}\n"
+                f"GC content: {gc:.2f}%\n"
+                f"DNA sequence: {'VALID' if valid else 'CHECK SEQUENCE'}"
+            )
+        self.button("ANALYZE SEQUENCE", analyze)
+
+    def drug_discovery(self):
+        self.clear()
+        self.page_title("Drug Discovery", "Molecule screening")
+        self.workspace.add_widget(Label(
+            text="SMILES",
+            color=self.hex(MUTED),
+            size_hint_y=None,
+            height=dp(30)
+        ))
+        entry = TextInput(
+            text="CCO",
+            multiline=False,
+            background_color=self.hex(INPUT),
+            foreground_color=self.hex(TEXT),
+            cursor_color=self.hex(TEXT),
+            size_hint_y=None,
+            height=dp(50)
+        )
+        self.workspace.add_widget(entry)
+        out = self.output()
+
+        def screen(instance):
+            s = entry.text.strip()
+            atoms, i = {}, 0
+            while i < len(s):
+                if s[i].isupper():
+                    a = s[i]; i += 1
+                    if i < len(s) and s[i].islower():
+                        a += s[i]; i += 1
+                    atoms[a] = atoms.get(a, 0) + 1
+                else:
+                    i += 1
+            c,n,o = atoms.get("C",0), atoms.get("N",0), atoms.get("O",0)
+            h = max(2*c + 2 + n, 0)
+            mw = c*12.011 + h*1.008 + n*14.007 + o*15.999
+            formula = f"C{c}H{h}" + (f"N{n}" if n else "") + (f"O{o}" if o else "")
+            out.text = (
+                "=== DRUG DISCOVERY SCREEN ===\n\n"
+                f"SMILES: {s}\nFormula: {formula}\n"
+                f"Approx. MW: {mw:.3f} g/mol\n"
+                f"MW <= 500: {'PASS' if mw <= 500 else 'FAIL'}\n\n"
+                "Computational filter only."
+            )
+        self.button("SCREEN MOLECULE", screen)
+
+    def virtual_laboratory(self):
+        self.clear()
+        self.page_title("Virtual Laboratory", "Experiment workspace")
+        out = self.output()
+        out.text = (
+            "=== VIRTUAL LABORATORY ===\n\n"
+            "Target → PDB → Pocket → Docking → ML → Report\n\n"
+            "Har bir bosqichni quyidagi tugmalar orqali oching."
+        )
+        self.button("PDB ANALYSIS", lambda x: self.pdb_analysis())
+        self.button("POCKET ANALYSIS", lambda x: self.pocket_analysis())
+        self.button("DOCKING", lambda x: self.docking())
+        self.button("ML + REPORT", lambda x: self.ml_ranking_report())
+
+    def research_assistant(self):
+        self.clear()
+        self.page_title("Research Assistant", "Research workflow")
+        self.workspace.add_widget(Label(
+            text="Savol / tadqiqot mavzusi",
+            color=self.hex(MUTED),
+            size_hint_y=None,
+            height=dp(30)
+        ))
+        query = TextInput(
+            multiline=True,
+            background_color=self.hex(INPUT),
+            foreground_color=self.hex(TEXT),
+            cursor_color=self.hex(TEXT),
+            font_size=15
+        )
+        self.workspace.add_widget(query)
+        out = self.output()
+
+        def prepare(instance):
+            q = query.text.strip()
+            if not q:
+                out.text = "Savol yoki mavzu kiriting."
+                return
+            out.text = (
+                "=== RESEARCH ASSISTANT ===\n\n"
+                f"Mavzu:\n{q}\n\n"
+                "Tadqiqot workflow:\n"
+                "1. Target va biologik savolni aniqlash\n"
+                "2. Sequence/PDB ma'lumotini tayyorlash\n"
+                "3. Structure va pocket analysis\n"
+                "4. Docking va ML natijalarini solishtirish\n"
+                "5. Natijalarni tarixga saqlash\n\n"
+                "Bu modul workflow tayyorlaydi; eksperimental yoki "
+                "klinik xulosa bermaydi."
+            )
+        self.button("PREPARE WORKFLOW", prepare)
 
     def molecular(self):
         self.clear()
