@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -27,8 +27,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             git zip unzip autoconf automake libtool \
-            pkg-config zlib1g-dev libncurses5-dev \
-            libncursesw5-dev cmake libffi-dev libssl-dev
+            libtool-bin pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev
 
       - name: Install Buildozer
         run: |
@@ -36,23 +37,12 @@ jobs:
           python -m pip install buildozer cython
 
       - name: Build APK
-        continue-on-error: true
         run: |
-          buildozer -v android debug > build.log 2>&1 || true
-          echo "===== LAST 300 LINES ====="
-          tail -300 build.log
-
-      - name: Upload full build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: MedGenAI-full-log
-          path: build.log
+          buildozer -v android debug
 
       - name: Upload APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MedGenAI-APK
           path: bin/*.apk
-          if-no-files-found: ignore
