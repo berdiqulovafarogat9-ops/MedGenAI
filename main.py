@@ -693,55 +693,191 @@ class MedGenAI(App):
         self.clear()
         self.page_title(
             "AI Structure Prediction",
-            "AlphaFold / ColabFold workflow"
+            "Protein sequence validation + ColabFold workflow"
         )
 
         self.workspace.add_widget(Label(
-            text="Protein sequence",
-            color=self.hex(MUTED),
-            size_hint_y=None,
-            height=dp(30)
+            text="Protein sequence (FASTA or raw amino-acid sequence)",
+            color=self.hex(MUTED), size_hint_y=None, height=dp(30)
         ))
 
         seq = TextInput(
             multiline=True,
+            hint_text="Masalan: MKTIIALSYIFCLVFADYKDDDDK",
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
-            cursor_color=self.hex(TEXT),
-            font_size=14
+            cursor_color=self.hex(TEXT), font_size=14
         )
         self.workspace.add_widget(seq)
 
-        status = Label(
-            text="Ready",
-            color=self.hex(MUTED),
-            size_hint_y=None,
-            height=dp(35)
-        )
+        status = Label(text="Ready", color=self.hex(MUTED), size_hint_y=None, height=dp(35))
         self.workspace.add_widget(status)
 
-        def open_colab(instance):
-            s = seq.text.strip()
-            if not s:
+        output = TextInput(
+            text="Natijalar shu yerda chiqadi.", readonly=True, multiline=True,
+            background_color=self.hex(PANEL), foreground_color=self.hex(TEXT), font_size=13
+        )
+        self.workspace.add_widget(output)
+
+        valid_aa = set("ACDEFGHIKLMNPQRSTVWY")
+
+        def clean_sequence(raw):
+            lines = []
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line or line.startswith(">"):
+                    continue
+                lines.append(line.replace(" ", "").replace("\t", ""))
+            return "".join(lines).upper()
+
+        def validate():
+            clean = clean_sequence(seq.text)
+            invalid = sorted(set(clean) - valid_aa)
+            return clean, invalid
+
+        def analyze(instance):
+            clean, invalid = validate()
+            if not clean:
                 status.text = "Protein sequence kiriting."
+                output.text = "Sequence bo'sh."
+                return
+            if invalid:
+                status.text = "Noto'g'ri amino-kislota belgisi."
+                output.text = ("VALIDATION ERROR\n\nNoto'g'ri belgilar: " +
+                               ", ".join(invalid) +
+                               "\n\nRuxsat etilgan: ACDEFGHIKLMNPQRSTVWY")
                 return
 
-            clean = s.replace("\n", "").replace(" ", "")
-            status.text = f"Sequence: {len(clean)} aa"
+            length = len(clean)
+            counts = {aa: clean.count(aa) for aa in sorted(valid_aa)}
+            hydrophobic = sum(clean.count(x) for x in "AVILMFWY")
+            pos = sum(clean.count(x) for x in "KRH")
+            neg = sum(clean.count(x) for x in "DE")
+            warnings = []
+            if length < 30:
+                warnings.append("Juda qisqa sequence; prediction sifati cheklanishi mumkin.")
+            if length > 2000:
+                warnings.append("Juda uzun sequence; Colab GPU xotirasi yetmasligi mumkin.")
+            if clean.count("C") >= 2:
+                warnings.append("Cysteine mavjud; disulfide bondlar biologik kontekstga bog'liq.")
 
+            result = [
+                "STRUCTURE PREDICTION — SEQUENCE CHECK", "",
+                f"Length: {length} aa",
+                f"Hydrophobic residues: {hydrophobic} ({hydrophobic / length * 100:.1f}%)",
+                f"Positive (K/R/H): {pos}", f"Negative (D/E): {neg}",
+                f"Net charge count: {pos - neg}", "", "AMINO ACID COUNTS",
+                " ".join(f"{aa}:{counts[aa]}" for aa in sorted(valid_aa)), "",
+                "WORKFLOW", "1. Sequence validated locally",
+                "2. Copy sequence to ColabFold", "3. Run notebook with GPU",
+                "4. Download result ZIP / PDB", "5. Analyze PDB in MedGen AI"
+            ]
+            if warnings:
+                result += ["", "NOTES"] + [f"- {w}" for w in warnings]
+            output.text = "\n".join(result)
+            status.text = f"Valid sequence: {length} aa"
+
+        def copy_sequence(instance):
+            clean, invalid = validate()
+            if not clean:
+                status.text = "Avval sequence kiriting."
+                return
+            if invalid:
+                status.text = "Copy qilinmadi: sequence noto'g'ri."
+                return
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(clean)
+                status.text = "Sequence clipboard'ga nusxalandi."
+            except Exception as ex:
+                self.show_error("Clipboard", ex)
+
+        def save_fasta(instance):
+            clean, invalid = validate()
+            if not clean:
+                status.text = "Avval sequence kiriting."
+                return
+            if invalid:
+                status.text = "FASTA saqlanmadi: sequence noto'g'ri."
+                return
+            try:
+                path = os.path.join(self.user_data_dir, "structure_prediction.fasta")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(">MedGen_AI_protein\n")
+                    for i in range(0, len(clean), 80):
+                        f.write(clean[i:i+80] + "\n")
+                status.text = "FASTA saqlandi."
+                output.text = f"FASTA saved:\n{path}\n\nOPEN COLABFOLD ni bosing."
+            except Exception as ex:
+                self.show_error("Save FASTA", ex)
+
+        def open_colab(instance):
+            clean, invalid = validate()
+            if not clean:
+                status.text = "Avval protein sequence kiriting."
+                return
+            if invalid:
+                status.text = "ColabFold ochilmadi: sequence noto'g'ri."
+                return
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(clean)
+            except Exception:
+                pass
+            status.text = f"ColabFold ochilmoqda: {len(clean)} aa"
             webbrowser.open(
                 "https://colab.research.google.com/github/"
                 "sokrypton/ColabFold/blob/main/AlphaFold2.ipynb"
             )
+            output.text += ("\n\nCOLABFOLD OPENED\n"
+                            "Sequence clipboard'ga nusxalandi; notebookdagi inputga joylang.\n"
+                            "ColabFold natijasi ZIP/PDB ko'rinishida olinadi.")
 
-        self.button("OPEN COLABFOLD", open_colab)
+        def open_notebook(instance, name, url):
+            clean, invalid = validate()
+            if not clean:
+                status.text = "Avval protein sequence kiriting."
+                return
+            if invalid:
+                status.text = "Notebook ochilmadi: sequence noto'g'ri."
+                return
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(clean)
+            except Exception:
+                pass
+            status.text = f"{name} ochilmoqda: {len(clean)} aa"
+            webbrowser.open(url)
+            output.text = (
+                f"{name} OPENED\\n\\n"
+                "Sequence clipboard'ga nusxalandi. Notebookdagi inputga joylang.\\n"
+                "Prediction tugagach PDB/ZIP natijasini yuklab oling."
+            )
+
+        self.button("ANALYZE SEQUENCE", analyze)
+        self.button("COPY SEQUENCE", copy_sequence)
+        self.button("SAVE FASTA", save_fasta)
+        self.button("OPEN COLABFOLD / ALPHAFOLD2", open_colab)
+        self.button(
+            "OPEN ALPHAFOLD 3 / OPENFOLD3",
+            lambda instance: open_notebook(
+                instance,
+                "AlphaFold 3 / OpenFold3",
+                "https://colab.research.google.com/github/sokrypton/ColabFold/blob/main/AlphaFold3_of3.ipynb"
+            )
+        )
+        self.button(
+            "OPEN DEEPMIND ALPHAFOLD 2",
+            lambda instance: open_notebook(
+                instance,
+                "DeepMind AlphaFold 2",
+                "https://colab.research.google.com/github/deepmind/alphafold/blob/main/notebooks/AlphaFold.ipynb"
+            )
+        )
 
         self.workspace.add_widget(Label(
-            text="Sequence → ColabFold → PDB → MedGen AI",
-            color=self.hex(ACCENT),
-            font_size=14,
-            size_hint_y=None,
-            height=dp(40)
+            text="MedGen AI → Validate → ColabFold → PDB → PDB Analysis",
+            color=self.hex(ACCENT), font_size=14, size_hint_y=None, height=dp(40)
         ))
 
     def pdb_analysis(self):
