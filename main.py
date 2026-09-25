@@ -27,6 +27,7 @@ class MedGenAI(App):
     def build(self):
         global HISTORY_FILE
         HISTORY_FILE = os.path.join(self.user_data_dir, "medgen_history.json")
+        self._install_exception_hook()
         self.title = "MedGen AI"
 
         root = BoxLayout(orientation="horizontal")
@@ -79,6 +80,18 @@ class MedGenAI(App):
         self.dashboard()
         return root
 
+    def _install_exception_hook(self):
+        import sys
+        import traceback
+        def handle(exc_type, exc_value, exc_tb):
+            try:
+                log_path = os.path.join(self.user_data_dir, "crash.log")
+                with open(log_path, "a", encoding="utf-8") as f:
+                    traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+            except Exception:
+                pass
+        sys.excepthook = handle
+
     def hex(self, value):
         value = value.lstrip("#")
         return tuple(int(value[i:i+2], 16)/255 for i in (0,2,4)) + (1,)
@@ -93,7 +106,12 @@ class MedGenAI(App):
             color=self.hex(TEXT),
             halign="left"
         )
-        b.bind(on_release=command)
+        def safe_command(instance):
+            try:
+                command(instance)
+            except Exception as ex:
+                self.show_error("Navigation", ex)
+        b.bind(on_release=safe_command)
         self.sidebar.add_widget(b)
 
     def clear(self):
@@ -139,9 +157,27 @@ class MedGenAI(App):
             background_color=self.hex(ACCENT),
             color=self.hex(BG)
         )
-        b.bind(on_release=command)
+        def safe_command(instance):
+            try:
+                command(instance)
+            except Exception as ex:
+                self.show_error(text, ex)
+        b.bind(on_release=safe_command)
         self.workspace.add_widget(b)
         return b
+
+    def show_error(self, where, ex):
+        self.clear()
+        self.page_title("Xatolik", where)
+        out = self.output()
+        out.text = (
+            "Tugma ishlayotganda xatolik yuz berdi.\n\n"
+            f"Joy: {where}\n"
+            f"Xato: {type(ex).__name__}\n"
+            f"Ma'lumot: {ex}\n\n"
+            "Ilova endi yopilmaydi."
+        )
+        self.button("DASHBOARDGA QAYTISH", lambda x: self.dashboard())
 
     def dashboard(self):
         self.clear()
