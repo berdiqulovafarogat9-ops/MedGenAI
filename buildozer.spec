@@ -13,7 +13,7 @@ p4a.branch = develop
 orientation = portrait
 fullscreen = 0
 
-android.api = 33
+android.api = 35
 android.minapi = 24
 android.archs = arm64-v8a
 android.accept_sdk_license = True
