@@ -101,7 +101,7 @@ class MedGenAI(App):
     def clear(self):
         self.workspace.clear_widgets()
 
-    def title(self, text, sub=""):
+    def page_title(self, text, sub=""):
         self.workspace.add_widget(Label(
             text=f"[b]{text}[/b]",
             markup=True,
@@ -147,7 +147,7 @@ class MedGenAI(App):
 
     def dashboard(self):
         self.clear()
-        self.title(
+        self.page_title(
             "MedGen AI",
             "Computational biomedical research platform"
         )
@@ -161,7 +161,7 @@ class MedGenAI(App):
 
     def placeholder(self, name):
         self.clear()
-        self.title(name, "Module")
+        self.page_title(name, "Module")
         self.workspace.add_widget(Label(
             text="Module ready for integration.",
             color=self.hex(MUTED),
@@ -170,7 +170,7 @@ class MedGenAI(App):
 
     def molecular(self):
         self.clear()
-        self.title("Molecular Analysis", "SMILES analysis")
+        self.page_title("Molecular Analysis", "SMILES analysis")
 
         self.workspace.add_widget(Label(
             text="SMILES",
@@ -239,7 +239,7 @@ class MedGenAI(App):
 
     def structure_prediction(self):
         self.clear()
-        self.title(
+        self.page_title(
             "AI Structure Prediction",
             "AlphaFold / ColabFold workflow"
         )
@@ -294,7 +294,7 @@ class MedGenAI(App):
 
     def pdb_analysis(self):
         self.clear()
-        self.title(
+        self.page_title(
             "PDB Structure Analysis",
             "Import predicted protein structure"
         )
@@ -363,7 +363,7 @@ class MedGenAI(App):
 
     def pocket_analysis(self):
         self.clear()
-        self.title(
+        self.page_title(
             "Binding Pocket Analysis",
             "6WC8 binding-site analysis"
         )
@@ -454,7 +454,7 @@ class MedGenAI(App):
 
     def docking(self):
         self.clear()
-        self.title(
+        self.page_title(
             "Molecular Docking",
             "AutoDock Vina result"
         )
@@ -507,7 +507,7 @@ not experimental binding affinity or clinical efficacy.
 
     def ml_ranking_report(self):
         self.clear()
-        self.title(
+        self.page_title(
             "ML • Ranking • Report",
             "Computational candidate analysis"
         )
@@ -611,7 +611,7 @@ not experimental binding affinity or clinical efficacy.
 
     def results_history(self):
         self.clear()
-        self.title(
+        self.page_title(
             "Results & History",
             "Saved computational experiments"
         )
