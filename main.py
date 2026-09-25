@@ -195,15 +195,15 @@ class MedGenAI(App):
 
     def bioinformatics(self):
         self.clear()
-        self.page_title("Bioinformatics", "Sequence utilities")
+        self.page_title("Bioinformatics", "Sequence analysis & utilities")
         self.workspace.add_widget(Label(
-            text="DNA/RNA sequence",
+            text="DNA / RNA sequence or FASTA",
             color=self.hex(MUTED),
             size_hint_y=None,
             height=dp(30)
         ))
         seq = TextInput(
-            text="ATGCGTACGTAG",
+            text=">Example\nATGCGTACGTAG",
             multiline=True,
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
@@ -213,19 +213,153 @@ class MedGenAI(App):
         self.workspace.add_widget(seq)
         out = self.output()
 
+        codons = {
+            "TTT":"F","TTC":"F","TTA":"L","TTG":"L",
+            "TCT":"S","TCC":"S","TCA":"S","TCG":"S",
+            "TAT":"Y","TAC":"Y","TAA":"*","TAG":"*",
+            "TGT":"C","TGC":"C","TGA":"*","TGG":"W",
+            "CTT":"L","CTC":"L","CTA":"L","CTG":"L",
+            "CCT":"P","CCC":"P","CCA":"P","CCG":"P",
+            "CAT":"H","CAC":"H","CAA":"Q","CAG":"Q",
+            "CGT":"R","CGC":"R","CGA":"R","CGG":"R",
+            "ATT":"I","ATC":"I","ATA":"I","ATG":"M",
+            "ACT":"T","ACC":"T","ACA":"T","ACG":"T",
+            "AAT":"N","AAC":"N","AAA":"K","AAG":"K",
+            "AGT":"S","AGC":"S","AGA":"R","AGG":"R",
+            "GTT":"V","GTC":"V","GTA":"V","GTG":"V",
+            "GCT":"A","GCC":"A","GCA":"A","GCG":"A",
+            "GAT":"D","GAC":"D","GAA":"E","GAG":"E",
+            "GGT":"G","GGC":"G","GGA":"G","GGG":"G"
+        }
+
+        def clean_sequence(raw):
+            lines = [line.strip() for line in raw.splitlines() if line.strip()]
+            fasta = any(line.startswith(">") for line in lines)
+            if fasta:
+                lines = [line for line in lines if not line.startswith(">")]
+            s = "".join(lines).upper().replace(" ", "").replace("U", "T")
+            return s, fasta
+
+        def translate(s, frame=0):
+            aa = []
+            for i in range(frame, len(s) - 2, 3):
+                aa.append(codons.get(s[i:i+3], "X"))
+            return "".join(aa)
+
+        def reverse_complement(s):
+            table = str.maketrans("ACGTN", "TGCAN")
+            return s.translate(table)[::-1]
+
+        def find_orfs(s):
+            results = []
+            stop = {"TAA", "TAG", "TGA"}
+            for strand_name, strand in (("+", s), ("-", reverse_complement(s))):
+                for frame in range(3):
+                    start = None
+                    for i in range(frame, len(strand) - 2, 3):
+                        codon = strand[i:i+3]
+                        if start is None and codon == "ATG":
+                            start = i
+                        elif start is not None and codon in stop:
+                            dna = strand[start:i+3]
+                            protein = translate(dna)
+                            results.append((strand_name, frame + 1, start + 1, i + 3, protein))
+                            start = None
+            return results
+
         def analyze(instance):
-            s = "".join(seq.text.upper().split())
+            s, fasta = clean_sequence(seq.text)
             valid = bool(s) and all(c in "ACGTN" for c in s)
-            a,t,g,c,n = (s.count(x) for x in "ATGCN")
-            gc = ((g+c)/len(s)*100) if s else 0
+            if not s:
+                out.text = "No sequence provided."
+                return
+            if not valid:
+                bad = sorted(set(c for c in s if c not in "ACGTN"))
+                out.text = "=== BIOINFORMATICS ===\n\nINVALID SEQUENCE\n"
+                out.text += "Allowed symbols: A, C, G, T, N\n"
+                out.text += "Invalid: " + ", ".join(bad)
+                return
+            a_count, t_count, g_count, c_count, n_count = (s.count(x) for x in "ATGCN")
+            gc = ((g_count + c_count) / len(s) * 100) if s else 0
+            at = ((a_count + t_count) / len(s) * 100) if s else 0
             out.text = (
-                "=== BIOINFORMATICS ===\n\n"
+                "=== BIOINFORMATICS ANALYSIS ===\n\n"
+                f"Input format: {'FASTA' if fasta else 'Raw sequence'}\n"
                 f"Length: {len(s)} nt\n"
-                f"A: {a}  T: {t}  G: {g}  C: {c}  N: {n}\n"
+                f"A: {a_count}  T: {t_count}  G: {g_count}  C: {c_count}  N: {n_count}\n"
                 f"GC content: {gc:.2f}%\n"
-                f"DNA sequence: {'VALID' if valid else 'CHECK SEQUENCE'}"
+                f"AT content: {at:.2f}%\n"
+                f"GC/AT ratio: {(gc/at):.3f}\n" if at else
+                "=== BIOINFORMATICS ANALYSIS ===\n\n"
+                f"Input format: {'FASTA' if fasta else 'Raw sequence'}\n"
+                f"Length: {len(s)} nt\n"
+                f"A: {a_count}  T: {t_count}  G: {g_count}  C: {c_count}  N: {n_count}\n"
+                f"GC content: {gc:.2f}%\n"
+                f"AT content: {at:.2f}%\n"
+                "GC/AT ratio: undefined (AT = 0)\n"
             )
+            out.text += "Sequence: VALID"
+
+        def show_reverse_complement(instance):
+            s, _ = clean_sequence(seq.text)
+            if not s:
+                out.text = "No sequence provided."
+                return
+            if any(c not in "ACGTN" for c in s):
+                out.text = "Invalid sequence. Allowed symbols: A, C, G, T, N"
+                return
+            rc = reverse_complement(s)
+            out.text = "=== REVERSE COMPLEMENT ===\n\n" + rc
+
+        def show_translation(instance):
+            s, _ = clean_sequence(seq.text)
+            if not s:
+                out.text = "No sequence provided."
+                return
+            if any(c not in "ACGTN" for c in s):
+                out.text = "Invalid sequence. Allowed symbols: A, C, G, T, N"
+                return
+            proteins = [translate(s, f) for f in range(3)]
+            out.text = "=== 3-FRAME PROTEIN TRANSLATION ===\n\n"
+            for f, protein in enumerate(proteins, 1):
+                out.text += f"Frame +{f}:\n{protein}\n\n"
+            out.text += "Stop codon = *   Unknown codon = X"
+
+        def show_orfs(instance):
+            s, _ = clean_sequence(seq.text)
+            if not s:
+                out.text = "No sequence provided."
+                return
+            if any(c not in "ACGTN" for c in s):
+                out.text = "Invalid sequence. Allowed symbols: A, C, G, T, N"
+                return
+            orfs = find_orfs(s)
+            if not orfs:
+                out.text = "=== ORF SEARCH ===\n\nNo complete ATG-to-stop ORF found."
+                return
+            out.text = f"=== ORF SEARCH ===\n\nFound: {len(orfs)} complete ORF(s)\n\n"
+            for idx, (strand, frame, start, end, protein) in enumerate(orfs, 1):
+                out.text += (
+                    f"ORF {idx}: strand {strand}, frame {frame}, "
+                    f"nt {start}-{end}, {len(protein)-1} aa\n"
+                    f"Protein: {protein}\n\n"
+                )
+
+        def save_report(instance):
+            try:
+                import os
+                path = os.path.join(self.user_data_dir, "bioinformatics_report.txt")
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(out.text)
+                out.text += f"\n\nSaved: {path}"
+            except Exception as ex:
+                self.show_error("Save report", ex)
+
         self.button("ANALYZE SEQUENCE", analyze)
+        self.button("REVERSE COMPLEMENT", show_reverse_complement)
+        self.button("TRANSLATE PROTEIN", show_translation)
+        self.button("FIND ORFs", show_orfs)
+        self.button("SAVE REPORT", save_report)
 
     def drug_discovery(self):
         self.clear()
