@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,json,png,jpg,kv
 version = 1.0
 
-requirements = python3,kivy==2.3.1
+requirements = python3==3.11.9,hostpython3==3.11.9,kivy==2.3.1
 
 p4a.branch = develop
 
