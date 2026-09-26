@@ -833,50 +833,13 @@ class MedGenAI(App):
                             "Sequence clipboard'ga nusxalandi; notebookdagi inputga joylang.\n"
                             "ColabFold natijasi ZIP/PDB ko'rinishida olinadi.")
 
-        def open_notebook(instance, name, url):
-            clean, invalid = validate()
-            if not clean:
-                status.text = "Avval protein sequence kiriting."
-                return
-            if invalid:
-                status.text = "Notebook ochilmadi: sequence noto'g'ri."
-                return
-            try:
-                from kivy.core.clipboard import Clipboard
-                Clipboard.copy(clean)
-            except Exception:
-                pass
-            status.text = f"{name} ochilmoqda: {len(clean)} aa"
-            webbrowser.open(url)
-            output.text = (
-                f"{name} OPENED\\n\\n"
-                "Sequence clipboard'ga nusxalandi. Notebookdagi inputga joylang.\\n"
-                "Prediction tugagach PDB/ZIP natijasini yuklab oling."
-            )
-
         self.button("ANALYZE SEQUENCE", analyze)
         self.button("COPY SEQUENCE", copy_sequence)
         self.button("SAVE FASTA", save_fasta)
-        self.button("OPEN COLABFOLD / ALPHAFOLD2", open_colab)
-        self.button(
-            "OPEN ALPHAFOLD 3 / OPENFOLD3",
-            lambda instance: open_notebook(
-                instance,
-                "AlphaFold 3 / OpenFold3",
-                "https://colab.research.google.com/github/sokrypton/ColabFold/blob/main/AlphaFold3_of3.ipynb"
-            )
-        )
-        self.button(
-            "OPEN ALPHAFOLD SERVER (AF3)",
-            lambda instance: open_notebook(
-                instance,
-                "AlphaFold Server",
-                "https://alphafoldserver.com/"
-            )
-        )
+        self.button("OPEN COLABFOLD", open_colab)
 
         self.workspace.add_widget(Label(
-            text="MedGen AI → Validate → AlphaFold/ColabFold → PDB → PDB Analysis",
+            text="MedGen AI → Validate → ColabFold → PDB → PDB Analysis",
             color=self.hex(ACCENT), font_size=14, size_hint_y=None, height=dp(40)
         ))
 
@@ -884,10 +847,8 @@ class MedGenAI(App):
         self.clear()
         self.page_title(
             "PDB Structure Analysis",
-            "Import predicted protein structure"
+            "Protein structure inspection & statistics"
         )
-
-        out = self.output()
 
         self.workspace.add_widget(Label(
             text="PDB fayl yo'lini kiriting:",
@@ -905,49 +866,138 @@ class MedGenAI(App):
             height=dp(50)
         )
         self.workspace.add_widget(path)
+        out = self.output()
 
-        def load(instance):
+        last_report = {"text": ""}
+
+        def analyze_pdb(instance):
             f = path.text.strip()
-
             if not os.path.isfile(f):
                 out.text = "PDB file topilmadi:\n" + f
                 return
 
             try:
-                with open(
-                    f,
-                    encoding="utf-8",
-                    errors="ignore"
-                ) as fh:
-                    data = fh.read()
+                atoms = 0
+                hetatm = 0
+                residues = set()
+                chains = set()
+                residue_counts = {}
+                element_counts = {}
+                b_values = []
+                occupancy_values = []
+                models = 0
+                title_lines = []
+                seqres = 0
 
-                lines = data.splitlines()
-                atoms = sum(
-                    1 for x in lines
-                    if x.startswith(("ATOM  ", "HETATM"))
+                with open(f, encoding="utf-8", errors="ignore") as fh:
+                    for line in fh:
+                        rec = line[:6].strip()
+                        if rec == "TITLE" and len(title_lines) < 3:
+                            title_lines.append(line[10:].strip())
+                        elif rec == "MODEL":
+                            models += 1
+                        elif rec == "SEQRES":
+                            seqres += 1
+                        elif rec in ("ATOM", "HETATM") and len(line) >= 54:
+                            if rec == "ATOM":
+                                atoms += 1
+                            else:
+                                hetatm += 1
+
+                            chain = line[21].strip() or "_"
+                            resname = line[17:20].strip() or "UNK"
+                            resseq = line[22:26].strip()
+                            icode = line[26].strip()
+                            residue_key = (chain, resseq, icode, resname)
+                            residues.add(residue_key)
+                            chains.add(chain)
+                            residue_counts[chain] = residue_counts.get(chain, 0) + (1 if rec == "ATOM" else 0)
+
+                            element = line[76:78].strip().upper() if len(line) >= 78 else ""
+                            if not element:
+                                atom_name = line[12:16].strip().upper()
+                                element = atom_name[0] if atom_name else "?"
+                            element_counts[element] = element_counts.get(element, 0) + 1
+
+                            try:
+                                b_values.append(float(line[60:66]))
+                            except Exception:
+                                pass
+                            try:
+                                occupancy_values.append(float(line[54:60]))
+                            except Exception:
+                                pass
+
+                protein_residues = {r for r in residues if r[3] not in ("HOH", "WAT")}
+                chain_lengths = {}
+                for chain in chains:
+                    chain_lengths[chain] = len({
+                        (r[1], r[2]) for r in protein_residues if r[0] == chain
+                    })
+
+                def avg(values):
+                    return sum(values) / len(values) if values else 0.0
+
+                def minmax(values):
+                    return (min(values), max(values)) if values else (0.0, 0.0)
+
+                bmin, bmax = minmax(b_values)
+                omin, omax = minmax(occupancy_values)
+                title = " ".join(title_lines).strip() or "Not provided"
+                chain_text = ", ".join(
+                    f"{c}: {chain_lengths[c]} residues" for c in sorted(chain_lengths)
+                ) or "None"
+                element_text = ", ".join(
+                    f"{e}: {n}" for e, n in sorted(element_counts.items())
                 )
 
-                residues = set()
-
-                for x in lines:
-                    if x.startswith("ATOM  ") and len(x) >= 26:
-                        residues.add(x[17:26].strip())
-
-                out.text = (
-                    "=== PDB STRUCTURE ===\n\n"
+                report = (
+                    "=== PDB STRUCTURE ANALYSIS ===\n\n"
                     f"File: {os.path.basename(f)}\n"
                     f"Path: {f}\n"
-                    f"Atoms: {atoms}\n"
-                    f"Residues: {len(residues)}\n\n"
+                    f"Title: {title}\n\n"
+                    "STRUCTURE\n"
+                    f"ATOM records: {atoms}\n"
+                    f"HETATM records: {hetatm}\n"
+                    f"Unique residues: {len(protein_residues)}\n"
+                    f"Chains: {len(chains)}\n"
+                    f"Models: {models if models else 1}\n"
+                    f"SEQRES records: {seqres}\n\n"
+                    "CHAIN LENGTHS\n"
+                    f"{chain_text}\n\n"
+                    "B-FACTOR\n"
+                    f"Mean: {avg(b_values):.2f}\n"
+                    f"Min: {bmin:.2f}\n"
+                    f"Max: {bmax:.2f}\n\n"
+                    "OCCUPANCY\n"
+                    f"Mean: {avg(occupancy_values):.3f}\n"
+                    f"Min: {omin:.3f}\n"
+                    f"Max: {omax:.3f}\n\n"
+                    "ELEMENTS\n"
+                    f"{element_text or 'Not available'}\n\n"
                     "STATUS: PDB LOADED\n\n"
-                    "Next workflow:\n"
-                    "PDB → Pocket Analysis → Docking → ML → Ranking"
+                    "NEXT WORKFLOW\n"
+                    "PDB → Binding Pocket → Docking → ML/Ranking → Report"
                 )
-
+                last_report["text"] = report
+                out.text = report
             except Exception as ex:
-                out.text = "PDB Error:\n\n" + str(ex)
+                self.show_error("PDB Analysis", ex)
 
-        self.button("LOAD PDB", load)
+        def save_report(instance):
+            if not last_report["text"]:
+                out.text = "Avval PDB faylini ANALYZE qiling."
+                return
+            try:
+                report_path = os.path.join(self.user_data_dir, "pdb_analysis_report.txt")
+                with open(report_path, "w", encoding="utf-8") as fh:
+                    fh.write(last_report["text"])
+                out.text = last_report["text"] + f"\n\nSaved: {report_path}"
+            except Exception as ex:
+                self.show_error("Save PDB report", ex)
+
+        self.button("ANALYZE PDB", analyze_pdb)
+        self.button("SAVE REPORT", save_report)
 
     def pocket_analysis(self):
         self.clear()
