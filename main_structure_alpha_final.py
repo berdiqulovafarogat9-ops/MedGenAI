@@ -867,16 +867,16 @@ class MedGenAI(App):
             )
         )
         self.button(
-            "OPEN DEEPMIND ALPHAFOLD 2",
+            "OPEN ALPHAFOLD SERVER (AF3)",
             lambda instance: open_notebook(
                 instance,
-                "DeepMind AlphaFold 2",
-                "https://colab.research.google.com/github/deepmind/alphafold/blob/main/notebooks/AlphaFold.ipynb"
+                "AlphaFold Server",
+                "https://alphafoldserver.com/"
             )
         )
 
         self.workspace.add_widget(Label(
-            text="MedGen AI → Validate → ColabFold → PDB → PDB Analysis",
+            text="MedGen AI → Validate → AlphaFold/ColabFold → PDB → PDB Analysis",
             color=self.hex(ACCENT), font_size=14, size_hint_y=None, height=dp(40)
         ))
 
