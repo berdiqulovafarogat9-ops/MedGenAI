@@ -11,6 +11,7 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.gridlayout import GridLayout
 
 BG = "#07111F"
 PANEL = "#0D1B2A"
@@ -29,63 +30,97 @@ class MedGenAI(App):
         HISTORY_FILE = os.path.join(self.user_data_dir, "medgen_history.json")
         self._install_exception_hook()
         self.title = "MedGen AI"
+        self.icon = os.path.join(os.path.dirname(__file__), "medgen_ai_icon.png")
 
-        root = BoxLayout(orientation="horizontal")
+        root = BoxLayout(orientation="vertical", spacing=dp(0))
 
-        self.sidebar = ScrollView(
-            size_hint_x=None,
-            width=dp(235),
-            do_scroll_x=False,
-            bar_width=dp(4)
-        )
-        self.sidebar_box = BoxLayout(
-            orientation="vertical",
+        # Portal-style top bar
+        header = BoxLayout(
+            orientation="horizontal",
             size_hint_y=None,
-            padding=dp(10),
+            height=dp(70),
+            padding=(dp(14), dp(8)),
+            spacing=dp(10)
+        )
+        self.menu_btn = Button(
+            text="☰",
+            size_hint_x=None,
+            width=dp(52),
+            background_normal="",
+            background_color=self.hex(PANEL),
+            color=self.hex(TEXT),
+            font_size=24
+        )
+        self.menu_btn.bind(on_release=lambda x: self.toggle_menu())
+        header.add_widget(self.menu_btn)
+        header.add_widget(Label(
+            text="[b]MEDGEN AI[/b]\n[size=11]Biomedical Research Platform[/size]",
+            markup=True,
+            color=self.hex(TEXT),
+            halign="left",
+            valign="middle"
+        ))
+        self.search = TextInput(
+            hint_text="Search modules...",
+            multiline=False,
+            size_hint_x=0.42,
+            background_color=self.hex(INPUT),
+            foreground_color=self.hex(TEXT),
+            cursor_color=self.hex(ACCENT),
+            padding=(dp(12), dp(10))
+        )
+        self.search.bind(text=lambda inst, val: self.filter_cards(val))
+        header.add_widget(self.search)
+        root.add_widget(header)
+
+        body = BoxLayout(orientation="horizontal")
+        self.sidebar = BoxLayout(
+            orientation="vertical",
+            size_hint_x=None,
+            width=dp(215),
+            padding=dp(8),
             spacing=dp(5)
         )
-        self.sidebar_box.bind(minimum_height=self.sidebar_box.setter("height"))
-        self.sidebar.add_widget(self.sidebar_box)
-
-        self.sidebar_box.add_widget(Label(
-            text="[b]MEDGEN AI[/b]",
+        self.sidebar.add_widget(Label(
+            text="[b]MODULES[/b]",
             markup=True,
             color=self.hex(ACCENT),
             size_hint_y=None,
-            height=dp(65),
-            font_size=20
+            height=dp(38),
+            font_size=14
         ))
-
         self.add_nav("Dashboard", self.dashboard)
         self.add_nav("Bioinformatics", self.bioinformatics)
-        self.add_nav("AI Structure Prediction",
-                     self.structure_prediction)
-        self.add_nav("PDB Structure Analysis",
-                     self.pdb_analysis)
-        self.add_nav("Binding Pocket Analysis",
-                     self.pocket_analysis)
+        self.add_nav("AI Structure Prediction", self.structure_prediction)
+        self.add_nav("PDB Structure Analysis", self.pdb_analysis)
+        self.add_nav("Binding Pocket Analysis", self.pocket_analysis)
         self.add_nav("Docking", self.docking)
-        self.add_nav("ML + Ranking + Report",
-                     self.ml_ranking_report)
-        self.add_nav("Molecular Analysis",
-                     self.molecular)
+        self.add_nav("ML + Ranking + Report", self.ml_ranking_report)
+        self.add_nav("Molecular Analysis", self.molecular)
         self.add_nav("Drug Discovery", self.drug_discovery)
         self.add_nav("Virtual Laboratory", self.virtual_laboratory)
         self.add_nav("Research Assistant", self.research_assistant)
-        self.add_nav("Results & History",
-                     self.results_history)
+        self.add_nav("Results & History", self.results_history)
+        body.add_widget(self.sidebar)
 
-        root.add_widget(self.sidebar)
-
+        self.workspace_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
         self.workspace = BoxLayout(
             orientation="vertical",
-            padding=dp(20),
-            spacing=dp(10)
+            padding=dp(18),
+            spacing=dp(10),
+            size_hint_y=None
         )
-        root.add_widget(self.workspace)
+        self.workspace.bind(minimum_height=self.workspace.setter("height"))
+        self.workspace_scroll.add_widget(self.workspace)
+        body.add_widget(self.workspace_scroll)
+        root.add_widget(body)
 
         self.dashboard()
         return root
+
+    def toggle_menu(self):
+        self.sidebar.width = dp(0) if self.sidebar.width > dp(20) else dp(215)
+        self.sidebar.opacity = 0 if self.sidebar.width == 0 else 1
 
     def _install_exception_hook(self):
         import sys
@@ -119,7 +154,7 @@ class MedGenAI(App):
             except Exception as ex:
                 self.show_error("Navigation", ex)
         b.bind(on_release=safe_command)
-        self.sidebar_box.add_widget(b)
+        self.sidebar.add_widget(b)
 
     def clear(self):
         self.workspace.clear_widgets()
@@ -141,12 +176,7 @@ class MedGenAI(App):
                 height=dp(35)
             ))
 
-    def output(self, height=dp(250)):
-        box = ScrollView(
-            size_hint_y=None,
-            height=height,
-            bar_width=dp(4)
-        )
+    def output(self):
         text = TextInput(
             readonly=False,
             multiline=True,
@@ -155,10 +185,10 @@ class MedGenAI(App):
             cursor_color=self.hex(TEXT),
             font_size=14,
             size_hint_y=None,
-            height=height
+            height=dp(300),
+            padding=(dp(12), dp(12))
         )
-        box.add_widget(text)
-        self.workspace.add_widget(box)
+        self.workspace.add_widget(text)
         return text
 
     def button(self, text, command):
@@ -194,17 +224,76 @@ class MedGenAI(App):
 
     def dashboard(self):
         self.clear()
-        self.page_title(
-            "MedGen AI",
-            "Computational biomedical research platform"
-        )
         self.workspace.add_widget(Label(
-            text="ðŸ§¬ AI + Bioinformatics + Computational Drug Discovery",
-            color=self.hex(ACCENT),
-            font_size=17,
+            text="[b]Welcome to MedGen AI[/b]",
+            markup=True,
+            color=self.hex(TEXT),
+            font_size=28,
             size_hint_y=None,
-            height=dp(50)
+            height=dp(48)
         ))
+        self.workspace.add_widget(Label(
+            text="AI + Bioinformatics + Computational Drug Discovery",
+            color=self.hex(MUTED),
+            font_size=15,
+            size_hint_y=None,
+            height=dp(34)
+        ))
+
+        modules = [
+            ("🧬  Bioinformatics", "Sequence, FASTA, ORF, translation", self.bioinformatics),
+            ("💊  Drug Discovery", "SMILES and drug-likeness screening", self.drug_discovery),
+            ("🧠  Structure Prediction", "Protein sequence → ColabFold", self.structure_prediction),
+            ("🧫  PDB Analysis", "Structure statistics and inspection", self.pdb_analysis),
+            ("🎯  Binding Pocket", "Pocket / residue analysis", self.pocket_analysis),
+            ("⚗️  Molecular Docking", "Docking workflow and results", self.docking),
+            ("🤖  ML + Ranking", "Candidate analysis and report", self.ml_ranking_report),
+            ("🧪  Virtual Laboratory", "End-to-end computational workflow", self.virtual_laboratory),
+            ("🔬  Research Assistant", "Research workflow preparation", self.research_assistant),
+            ("📊  Results & History", "Saved computational experiments", self.results_history),
+        ]
+        self.card_buttons = []
+        grid = GridLayout(cols=2, spacing=dp(12), size_hint_y=None, padding=dp(2))
+        grid.bind(minimum_height=grid.setter("height"))
+        for title, desc, command in modules:
+            card = Button(
+                text=f"[b]{title}[/b]\n[size=11]{desc}[/size]",
+                markup=True,
+                halign="left",
+                valign="middle",
+                text_size=(None, None),
+                size_hint_y=None,
+                height=dp(105),
+                background_normal="",
+                background_color=self.hex(PANEL),
+                color=self.hex(TEXT)
+            )
+            def card_action(instance, cmd=command, name=title):
+                try:
+                    cmd()
+                except Exception as ex:
+                    self.show_error(name, ex)
+            card.bind(on_release=card_action)
+            grid.add_widget(card)
+            self.card_buttons.append((card, (title + " " + desc).lower()))
+        self.workspace.add_widget(grid)
+
+        self.workspace.add_widget(Label(
+            text="[b]Workflow[/b]   Target → Sequence/PDB → Pocket → Docking → ML → Report",
+            markup=True,
+            color=self.hex(ACCENT),
+            font_size=14,
+            size_hint_y=None,
+            height=dp(44)
+        ))
+
+    def filter_cards(self, query):
+        if not hasattr(self, "card_buttons"):
+            return
+        q = query.strip().lower()
+        for card, haystack in self.card_buttons:
+            card.opacity = 1 if not q or q in haystack else 0
+            card.disabled = bool(q and q not in haystack)
 
     def bioinformatics(self):
         self.clear()
@@ -299,14 +388,14 @@ class MedGenAI(App):
                 "=== BIOINFORMATICS ANALYSIS ===\n\n"
                 f"Input format: {'FASTA' if fasta else 'Raw sequence'}\n"
                 f"Length: {len(s)} nt\n"
-                f"A: {a_count} T: {t_count} G: {g_count} C: {c_count} N: {n_count}\n"
+                f"A: {a_count}  T: {t_count}  G: {g_count}  C: {c_count}  N: {n_count}\n"
                 f"GC content: {gc:.2f}%\n"
                 f"AT content: {at:.2f}%\n"
                 f"GC/AT ratio: {(gc/at):.3f}\n" if at else
                 "=== BIOINFORMATICS ANALYSIS ===\n\n"
                 f"Input format: {'FASTA' if fasta else 'Raw sequence'}\n"
                 f"Length: {len(s)} nt\n"
-                f"A: {a_count} T: {t_count} G: {g_count} C: {c_count} N: {n_count}\n"
+                f"A: {a_count}  T: {t_count}  G: {g_count}  C: {c_count}  N: {n_count}\n"
                 f"GC content: {gc:.2f}%\n"
                 f"AT content: {at:.2f}%\n"
                 "GC/AT ratio: undefined (AT = 0)\n"
@@ -336,7 +425,7 @@ class MedGenAI(App):
             out.text = "=== 3-FRAME PROTEIN TRANSLATION ===\n\n"
             for f, protein in enumerate(proteins, 1):
                 out.text += f"Frame +{f}:\n{protein}\n\n"
-            out.text += "Stop codon = * Unknown codon = X"
+            out.text += "Stop codon = *   Unknown codon = X"
 
         def show_orfs(instance):
             s, _ = clean_sequence(seq.text)
@@ -541,11 +630,11 @@ class MedGenAI(App):
                     f"H-bond Donors (HBD): {hbd}",
                     f"H-bond Acceptors (HBA): {hba}",
                     f"Approx. Rotatable Bonds: {rot}",
-                    f"Approx. TPSA: {tpsa:.1f} Ã…Â²", "",
+                    f"Approx. TPSA: {tpsa:.1f} Å²", "",
                     "=== FILTERS ===",
                 ]
                 for name, ok in checks.items():
-                    lines.append(f"{'PASS' if ok else 'FAIL'} {name}")
+                    lines.append(f"{'PASS' if ok else 'FAIL'}  {name}")
                 lines.extend([
                     "",
                     f"Filters passed: {passed}/{len(checks)}", "",
@@ -587,7 +676,7 @@ class MedGenAI(App):
         out = self.output()
         out.text = (
             "=== VIRTUAL LABORATORY ===\n\n"
-            "Target â†’ PDB â†’ Pocket â†’ Docking â†’ ML â†’ Report\n\n"
+            "Target → PDB → Pocket → Docking → ML → Report\n\n"
             "Har bir bosqichni quyidagi tugmalar orqali oching."
         )
         self.button("PDB ANALYSIS", lambda x: self.pdb_analysis())
@@ -606,8 +695,6 @@ class MedGenAI(App):
         ))
         query = TextInput(
             multiline=True,
-            size_hint_y=None,
-            height=dp(130),
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
             cursor_color=self.hex(TEXT),
@@ -777,7 +864,7 @@ class MedGenAI(App):
                 warnings.append("Cysteine mavjud; disulfide bondlar biologik kontekstga bog'liq.")
 
             result = [
-                "STRUCTURE PREDICTION â€” SEQUENCE CHECK", "",
+                "STRUCTURE PREDICTION — SEQUENCE CHECK", "",
                 f"Length: {length} aa",
                 f"Hydrophobic residues: {hydrophobic} ({hydrophobic / length * 100:.1f}%)",
                 f"Positive (K/R/H): {pos}", f"Negative (D/E): {neg}",
@@ -854,7 +941,7 @@ class MedGenAI(App):
         self.button("OPEN COLABFOLD", open_colab)
 
         self.workspace.add_widget(Label(
-            text="MedGen AI â†’ Validate â†’ ColabFold â†’ PDB â†’ PDB Analysis",
+            text="MedGen AI → Validate → ColabFold → PDB → PDB Analysis",
             color=self.hex(ACCENT), font_size=14, size_hint_y=None, height=dp(40)
         ))
 
@@ -902,13 +989,13 @@ class MedGenAI(App):
                 lines = data.splitlines()
                 atoms = sum(
                     1 for x in lines
-                    if x.startswith(("ATOM ", "HETATM"))
+                    if x.startswith(("ATOM  ", "HETATM"))
                 )
 
                 residues = set()
 
                 for x in lines:
-                    if x.startswith("ATOM ") and len(x) >= 26:
+                    if x.startswith("ATOM  ") and len(x) >= 26:
                         residues.add(x[17:26].strip())
 
                 out.text = (
@@ -919,7 +1006,7 @@ class MedGenAI(App):
                     f"Residues: {len(residues)}\n\n"
                     "STATUS: PDB LOADED\n\n"
                     "Next workflow:\n"
-                    "PDB â†’ Pocket Analysis â†’ Docking â†’ ML â†’ Ranking"
+                    "PDB → Pocket Analysis → Docking → ML → Ranking"
                 )
 
             except Exception as ex:
@@ -973,7 +1060,7 @@ class MedGenAI(App):
                     errors="ignore"
                 ) as fh:
                     for x in fh:
-                        if not x.startswith("ATOM "):
+                        if not x.startswith("ATOM  "):
                             continue
 
                         atoms += 1
@@ -1003,14 +1090,14 @@ class MedGenAI(App):
                     "=== BINDING POCKET ANALYSIS ===\n\n"
                     f"PDB: {os.path.basename(f)}\n"
                     f"Pocket center: {center}\n"
-                    f"Radius: {radius} Ã…\n\n"
+                    f"Radius: {radius} Å\n\n"
                     f"Protein atoms: {atoms}\n"
                     f"Nearby atoms: {nearby}\n"
                     f"Nearby residues: {len(residues)}\n\n"
                     "RESIDUES:\n" +
                     ", ".join(sorted(residues)) +
                     "\n\nWORKFLOW:\n"
-                    "6WC8 â†’ Pocket â†’ Docking â†’ ML â†’ Ranking"
+                    "6WC8 → Pocket → Docking → ML → Ranking"
                 )
 
             except Exception as ex:
@@ -1027,7 +1114,46 @@ class MedGenAI(App):
 
         out = self.output()
 
-        out.text = """=== MOLECULAR DOCKING === Target: HIV-1 Integrase PDB: 6WC8 Ligand: TQM Engine: AutoDock Vina Scoring function: Vina Pocket center: X = 16.019 Y = 18.428 Z = 12.185 Box: 20 Ã— 20 Ã— 20 Ã… Exhaustiveness: 8 DOCKING RESULTS ------------------------------ Mode 1 -5.996 kcal/mol Mode 2 -5.951 kcal/mol Mode 3 -5.937 kcal/mol Mode 4 -5.792 kcal/mol Mode 5 -5.775 kcal/mol Mode 6 -5.700 kcal/mol Mode 7 -5.669 kcal/mol Mode 8 -5.667 kcal/mol Mode 9 -5.498 kcal/mol Mode 10 -5.246 kcal/mol BEST DOCKING SCORE ------------------------------ -5.996 kcal/mol STATUS: COMPUTATIONAL RESULT Note: This is a computational docking score, not experimental binding affinity or clinical efficacy. """
+        out.text = """=== MOLECULAR DOCKING ===
+
+Target: HIV-1 Integrase
+PDB: 6WC8
+Ligand: TQM
+
+Engine: AutoDock Vina
+Scoring function: Vina
+
+Pocket center:
+X = 16.019
+Y = 18.428
+Z = 12.185
+
+Box: 20 × 20 × 20 Å
+Exhaustiveness: 8
+
+DOCKING RESULTS
+------------------------------
+Mode 1   -5.996 kcal/mol
+Mode 2   -5.951 kcal/mol
+Mode 3   -5.937 kcal/mol
+Mode 4   -5.792 kcal/mol
+Mode 5   -5.775 kcal/mol
+Mode 6   -5.700 kcal/mol
+Mode 7   -5.669 kcal/mol
+Mode 8   -5.667 kcal/mol
+Mode 9   -5.498 kcal/mol
+Mode 10  -5.246 kcal/mol
+
+BEST DOCKING SCORE
+------------------------------
+-5.996 kcal/mol
+
+STATUS: COMPUTATIONAL RESULT
+
+Note:
+This is a computational docking score,
+not experimental binding affinity or clinical efficacy.
+"""
 
         self.button("REFRESH RESULT",
                      lambda x: None)
@@ -1035,14 +1161,63 @@ class MedGenAI(App):
     def ml_ranking_report(self):
         self.clear()
         self.page_title(
-            "ML â€¢ Ranking â€¢ Report",
+            "ML • Ranking • Report",
             "Computational candidate analysis"
         )
 
         out = self.output()
 
         def run(instance):
-            analysis_text = """=== MEDGEN AI FINAL ANALYSIS === Target: HIV-1 Integrase PDB: 6WC8 Docking: AutoDock Vina ML: Random Forest ESOL TOP CANDIDATES 1. CC(C)O Docking: -2.477 kcal/mol ESOL logS: 0.528 Similarity: 20.00% Final score: 0.556 2. CCCN Docking: -2.487 kcal/mol ESOL logS: 0.706 Similarity: 27.27% Final score: 0.556 3. CCCCN Docking: -2.714 kcal/mol ESOL logS: 0.049 Similarity: 21.43% Final score: 0.537 4. CCN Docking: -2.063 kcal/mol ESOL logS: 0.991 Similarity: 33.33% Final score: 0.530 5. CC(C)CO Docking: -2.567 kcal/mol ESOL logS: 0.125 Similarity: 36.36% Final score: 0.501 === REPORT === Workflow: Target â†’ PDB â†’ Pocket â†’ Docking â†’ ML â†’ Ranking STATUS: COMPUTATIONAL ANALYSIS COMPLETED Note: Docking scores and ML predictions are computational results, not experimental binding affinity or clinical efficacy. """
+            analysis_text = """=== MEDGEN AI FINAL ANALYSIS ===
+
+Target: HIV-1 Integrase
+PDB: 6WC8
+Docking: AutoDock Vina
+ML: Random Forest ESOL
+
+TOP CANDIDATES
+
+1. CC(C)O
+   Docking: -2.477 kcal/mol
+   ESOL logS: 0.528
+   Similarity: 20.00%
+   Final score: 0.556
+
+2. CCCN
+   Docking: -2.487 kcal/mol
+   ESOL logS: 0.706
+   Similarity: 27.27%
+   Final score: 0.556
+
+3. CCCCN
+   Docking: -2.714 kcal/mol
+   ESOL logS: 0.049
+   Similarity: 21.43%
+   Final score: 0.537
+
+4. CCN
+   Docking: -2.063 kcal/mol
+   ESOL logS: 0.991
+   Similarity: 33.33%
+   Final score: 0.530
+
+5. CC(C)CO
+   Docking: -2.567 kcal/mol
+   ESOL logS: 0.125
+   Similarity: 36.36%
+   Final score: 0.501
+
+=== REPORT ===
+
+Workflow:
+Target → PDB → Pocket → Docking → ML → Ranking
+
+STATUS: COMPUTATIONAL ANALYSIS COMPLETED
+
+Note:
+Docking scores and ML predictions are computational results,
+not experimental binding affinity or clinical efficacy.
+"""
 
             out.text = analysis_text
 
