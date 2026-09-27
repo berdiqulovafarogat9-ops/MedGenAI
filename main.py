@@ -3,6 +3,11 @@ import json
 import math
 import os
 import webbrowser
+import threading
+import urllib.request
+import xml.etree.ElementTree as ET
+
+from kivy.clock import Clock
 
 from kivy.app import App
 from kivy.metrics import dp
@@ -12,6 +17,7 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
+from kivy.uix.popup import Popup
 
 BG = "#07111F"
 PANEL = "#0D1B2A"
@@ -30,97 +36,42 @@ class MedGenAI(App):
         HISTORY_FILE = os.path.join(self.user_data_dir, "medgen_history.json")
         self._install_exception_hook()
         self.title = "MedGen AI"
-        self.icon = os.path.join(os.path.dirname(__file__), "medgen_ai_icon.png")
+        self.language = "uz"
+        self.modules = [
+            ("🧬", "Bioinformatics", self.bioinformatics),
+            ("💊", "Drug Discovery", self.drug_discovery),
+            ("🧪", "Structure Prediction", self.structure_prediction),
+            ("🧫", "PDB Analysis", self.pdb_analysis),
+            ("🎯", "Binding Pocket", self.pocket_analysis),
+            ("🔬", "Docking", self.docking),
+            ("🤖", "ML + Ranking", self.ml_ranking_report),
+            ("🧪", "Virtual Laboratory", self.virtual_laboratory),
+            ("📚", "Research Assistant", self.research_assistant),
+            ("📊", "Results & History", self.results_history),
+        ]
 
-        root = BoxLayout(orientation="vertical", spacing=dp(0))
-
-        # Portal-style top bar
-        header = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(70),
-            padding=(dp(14), dp(8)),
-            spacing=dp(10)
-        )
-        self.menu_btn = Button(
-            text="☰",
-            size_hint_x=None,
-            width=dp(52),
-            background_normal="",
-            background_color=self.hex(PANEL),
-            color=self.hex(TEXT),
-            font_size=24
-        )
-        self.menu_btn.bind(on_release=lambda x: self.toggle_menu())
-        header.add_widget(self.menu_btn)
-        header.add_widget(Label(
-            text="[b]MEDGEN AI[/b]\n[size=11]Biomedical Research Platform[/size]",
-            markup=True,
-            color=self.hex(TEXT),
-            halign="left",
-            valign="middle"
-        ))
-        self.search = TextInput(
-            hint_text="Search modules...",
-            multiline=False,
-            size_hint_x=0.42,
-            background_color=self.hex(INPUT),
-            foreground_color=self.hex(TEXT),
-            cursor_color=self.hex(ACCENT),
-            padding=(dp(12), dp(10))
-        )
-        self.search.bind(text=lambda inst, val: self.filter_cards(val))
-        header.add_widget(self.search)
+        root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        header = BoxLayout(size_hint_y=None, height=dp(64), spacing=dp(8))
+        menu = Button(text="☰", size_hint_x=None, width=dp(54), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT), font_size=25)
+        menu.bind(on_release=lambda *_: self.open_menu())
+        header.add_widget(menu)
+        header.add_widget(Label(text="[b]MEDGEN AI[/b]", markup=True, color=self.hex(ACCENT), font_size=21, size_hint_x=None, width=dp(145)))
+        self.search_box = TextInput(hint_text="Disease, gene, protein, drug, PDB, research...", multiline=False, background_color=self.hex(INPUT), foreground_color=self.hex(TEXT), cursor_color=self.hex(TEXT), font_size=14)
+        self.search_box.bind(on_text_validate=lambda *_: self.search_global())
+        header.add_widget(self.search_box)
+        search_btn = Button(text="🔎", size_hint_x=None, width=dp(54), background_normal="", background_color=self.hex(ACCENT), color=self.hex(BG))
+        search_btn.bind(on_release=lambda *_: self.search_global())
+        header.add_widget(search_btn)
+        lang = Button(text="UZ", size_hint_x=None, width=dp(58), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
+        lang.bind(on_release=lambda *_: self.open_language())
+        header.add_widget(lang)
         root.add_widget(header)
 
-        body = BoxLayout(orientation="horizontal")
-        self.sidebar = BoxLayout(
-            orientation="vertical",
-            size_hint_x=None,
-            width=dp(215),
-            padding=dp(8),
-            spacing=dp(5)
-        )
-        self.sidebar.add_widget(Label(
-            text="[b]MODULES[/b]",
-            markup=True,
-            color=self.hex(ACCENT),
-            size_hint_y=None,
-            height=dp(38),
-            font_size=14
-        ))
-        self.add_nav("Dashboard", self.dashboard)
-        self.add_nav("Bioinformatics", self.bioinformatics)
-        self.add_nav("AI Structure Prediction", self.structure_prediction)
-        self.add_nav("PDB Structure Analysis", self.pdb_analysis)
-        self.add_nav("Binding Pocket Analysis", self.pocket_analysis)
-        self.add_nav("Docking", self.docking)
-        self.add_nav("ML + Ranking + Report", self.ml_ranking_report)
-        self.add_nav("Molecular Analysis", self.molecular)
-        self.add_nav("Drug Discovery", self.drug_discovery)
-        self.add_nav("Virtual Laboratory", self.virtual_laboratory)
-        self.add_nav("Research Assistant", self.research_assistant)
-        self.add_nav("Results & History", self.results_history)
-        body.add_widget(self.sidebar)
-
-        self.workspace_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
-        self.workspace = BoxLayout(
-            orientation="vertical",
-            padding=dp(18),
-            spacing=dp(10),
-            size_hint_y=None
-        )
-        self.workspace.bind(minimum_height=self.workspace.setter("height"))
-        self.workspace_scroll.add_widget(self.workspace)
-        body.add_widget(self.workspace_scroll)
-        root.add_widget(body)
-
+        self.workspace = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
+        root.add_widget(self.workspace)
         self.dashboard()
+        Clock.schedule_once(lambda *_: self.refresh_news(), 0.5)
         return root
-
-    def toggle_menu(self):
-        self.sidebar.width = dp(0) if self.sidebar.width > dp(20) else dp(215)
-        self.sidebar.opacity = 0 if self.sidebar.width == 0 else 1
 
     def _install_exception_hook(self):
         import sys
@@ -177,18 +128,17 @@ class MedGenAI(App):
             ))
 
     def output(self):
+        box = ScrollView()
         text = TextInput(
             readonly=False,
             multiline=True,
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
             cursor_color=self.hex(TEXT),
-            font_size=14,
-            size_hint_y=None,
-            height=dp(300),
-            padding=(dp(12), dp(12))
+            font_size=14
         )
-        self.workspace.add_widget(text)
+        box.add_widget(text)
+        self.workspace.add_widget(box)
         return text
 
     def button(self, text, command):
@@ -222,78 +172,126 @@ class MedGenAI(App):
         )
         self.button("DASHBOARDGA QAYTISH", lambda x: self.dashboard())
 
-    def dashboard(self):
+    def card_button(self, icon, title, subtitle, command):
+        b = Button(text=f"{icon}  [b]{title}[/b]\n[size=12]{subtitle}[/size]", markup=True, background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT), halign="left", valign="middle", size_hint_y=None, height=dp(92))
+        b.bind(on_release=lambda *_: command())
+        return b
+
+    def open_menu(self):
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(5))
+        title = Label(text="[b]MEDGEN AI[/b]\nModules & Sections", markup=True, color=self.hex(ACCENT), size_hint_y=None, height=dp(60))
+        box.add_widget(title)
+        for icon, name, cmd in self.modules:
+            b = Button(text=f"{icon}  {name}", size_hint_y=None, height=dp(44), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
+            b.bind(on_release=lambda inst, c=cmd: (self._close_menu(), c()))
+            box.add_widget(b)
+        close = Button(text="CLOSE", size_hint_y=None, height=dp(44), background_normal="", background_color=self.hex(ACCENT), color=self.hex(BG))
+        close.bind(on_release=lambda *_: self._close_menu())
+        box.add_widget(close)
+        self.menu_popup = Popup(title="", content=box, size_hint=(0.82, 0.88), background_color=self.hex(BG), separator_color=self.hex(ACCENT))
+        self.menu_popup.open()
+
+    def _close_menu(self):
+        if getattr(self, "menu_popup", None):
+            self.menu_popup.dismiss()
+
+    def open_language(self):
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        for code, name in (("uz", "🇺🇿 O‘zbek"), ("ru", "🇷🇺 Русский"), ("en", "🇬🇧 English")):
+            b = Button(text=name, size_hint_y=None, height=dp(50), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
+            b.bind(on_release=lambda inst, c=code: self.set_language(c))
+            box.add_widget(b)
+        self.lang_popup = Popup(title="Language / Til", content=box, size_hint=(0.75, 0.42))
+        self.lang_popup.open()
+
+    def set_language(self, code):
+        self.language = code
+        self.lang_popup.dismiss()
+        self.dashboard()
+
+    def search_global(self):
+        q = self.search_box.text.strip().lower()
+        if not q:
+            self.dashboard(); return
         self.clear()
-        self.workspace.add_widget(Label(
-            text="[b]Welcome to MedGen AI[/b]",
-            markup=True,
-            color=self.hex(TEXT),
-            font_size=28,
-            size_hint_y=None,
-            height=dp(48)
-        ))
-        self.workspace.add_widget(Label(
-            text="AI + Bioinformatics + Computational Drug Discovery",
-            color=self.hex(MUTED),
-            font_size=15,
-            size_hint_y=None,
-            height=dp(34)
-        ))
-
-        modules = [
-            ("🧬  Bioinformatics", "Sequence, FASTA, ORF, translation", self.bioinformatics),
-            ("💊  Drug Discovery", "SMILES and drug-likeness screening", self.drug_discovery),
-            ("🧠  Structure Prediction", "Protein sequence → ColabFold", self.structure_prediction),
-            ("🧫  PDB Analysis", "Structure statistics and inspection", self.pdb_analysis),
-            ("🎯  Binding Pocket", "Pocket / residue analysis", self.pocket_analysis),
-            ("⚗️  Molecular Docking", "Docking workflow and results", self.docking),
-            ("🤖  ML + Ranking", "Candidate analysis and report", self.ml_ranking_report),
-            ("🧪  Virtual Laboratory", "End-to-end computational workflow", self.virtual_laboratory),
-            ("🔬  Research Assistant", "Research workflow preparation", self.research_assistant),
-            ("📊  Results & History", "Saved computational experiments", self.results_history),
-        ]
-        self.card_buttons = []
-        grid = GridLayout(cols=2, spacing=dp(12), size_hint_y=None, padding=dp(2))
-        grid.bind(minimum_height=grid.setter("height"))
-        for title, desc, command in modules:
-            card = Button(
-                text=f"[b]{title}[/b]\n[size=11]{desc}[/size]",
-                markup=True,
-                halign="left",
-                valign="middle",
-                text_size=(None, None),
-                size_hint_y=None,
-                height=dp(105),
-                background_normal="",
-                background_color=self.hex(PANEL),
-                color=self.hex(TEXT)
-            )
-            def card_action(instance, cmd=command, name=title):
-                try:
-                    cmd()
-                except Exception as ex:
-                    self.show_error(name, ex)
-            card.bind(on_release=card_action)
-            grid.add_widget(card)
-            self.card_buttons.append((card, (title + " " + desc).lower()))
-        self.workspace.add_widget(grid)
-
-        self.workspace.add_widget(Label(
-            text="[b]Workflow[/b]   Target → Sequence/PDB → Pocket → Docking → ML → Report",
-            markup=True,
-            color=self.hex(ACCENT),
-            font_size=14,
-            size_hint_y=None,
-            height=dp(44)
-        ))
-
-    def filter_cards(self, query):
-        if not hasattr(self, "card_buttons"):
+        self.page_title("Global Search", "Disease • Gene • Protein • Drug • PDB • Research • News")
+        found = []
+        for icon, name, cmd in self.modules:
+            if q in name.lower():
+                found.append((icon, name, "Module", cmd))
+        for item in getattr(self, "news_items", []):
+            if q in (item[0] + " " + item[1] + " " + item[2]).lower():
+                found.append(("📰", item[0], item[2], lambda item=item: self.show_news(item)))
+        if not found:
+            self.workspace.add_widget(Label(text=f"No results for: {q}", color=self.hex(MUTED), size_hint_y=None, height=dp(50)))
             return
-        q = query.strip().lower()
-        for card, haystack in self.card_buttons:
-            card.opacity = 1 if not q or q in haystack else 0
-            card.disabled = bool(q and q not in haystack)
+        grid = GridLayout(cols=1, spacing=dp(7), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        for icon, title, sub, cmd in found:
+            grid.add_widget(self.card_button(icon, title, sub, cmd))
+        scroll = ScrollView()
+        scroll.add_widget(grid)
+        self.workspace.add_widget(scroll)
+
+    def refresh_news(self):
+        self.news_items = []
+        self._news_loading = True
+        threading.Thread(target=self._fetch_news, daemon=True).start()
+
+    def _fetch_news(self):
+        feeds = [
+            ("NIH", "https://www.nih.gov/news-events/news-releases/rss.xml"),
+            ("WHO", "https://www.who.int/feeds/entity/mediacentre/news/en/rss.xml"),
+        ]
+        items = []
+        for source, url in feeds:
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "MedGenAI/1.0"})
+                data = urllib.request.urlopen(req, timeout=8).read()
+                root = ET.fromstring(data)
+                for it in root.findall(".//item")[:8]:
+                    title = (it.findtext("title") or "").strip()
+                    link = (it.findtext("link") or "").strip()
+                    pub = (it.findtext("pubDate") or "").strip()
+                    if title:
+                        items.append((title, link, f"{source} • {pub}"))
+            except Exception:
+                pass
+        Clock.schedule_once(lambda *_: self._apply_news(items), 0)
+
+    def _apply_news(self, items):
+        self.news_items = items
+        self._news_loading = False
+        if getattr(self, "on_dashboard", False):
+            self.dashboard()
+
+    def show_news(self, item):
+        title, link, meta = item
+        self.clear(); self.page_title(title, meta)
+        out = self.output(); out.text = f"{title}\n\nSource: {meta}\n\nOpen source: {link}"
+        self.button("OPEN SOURCE", lambda *_: webbrowser.open(link))
+        self.button("BACK HOME", lambda *_: self.dashboard())
+
+    def dashboard(self):
+        self.clear(); self.on_dashboard = True
+        labels = {"uz": ("Bosh sahifa", "Butunjahon biomedical research portal"), "ru": ("Главная", "Глобальный портал биомедицинских исследований"), "en": ("Home", "Global biomedical research portal")}
+        title, sub = labels.get(self.language, labels["uz"])
+        self.page_title(title, sub)
+        self.workspace.add_widget(Label(text="🧬  AI + Bioinformatics + Drug Discovery + Biomedical News", color=self.hex(ACCENT), font_size=15, size_hint_y=None, height=dp(38)))
+        grid = GridLayout(cols=2, spacing=dp(7), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        for icon, name, cmd in self.modules:
+            grid.add_widget(self.card_button(icon, name, "Open module", cmd))
+        scroll = ScrollView(size_hint_y=None, height=dp(230)); scroll.add_widget(grid); self.workspace.add_widget(scroll)
+        self.workspace.add_widget(Label(text="[b]📰 Latest Biomedical News[/b]", markup=True, color=self.hex(TEXT), font_size=18, size_hint_y=None, height=dp(42)))
+        news_grid = GridLayout(cols=1, spacing=dp(7), size_hint_y=None); news_grid.bind(minimum_height=news_grid.setter("height"))
+        items = getattr(self, "news_items", [])[:8]
+        if not items:
+            news_grid.add_widget(Label(text="Loading global biomedical news...", color=self.hex(MUTED), size_hint_y=None, height=dp(50)))
+        for item in items:
+            news_grid.add_widget(self.card_button("📰", item[0], item[2], lambda item=item: self.show_news(item)))
+        news_scroll = ScrollView(); news_scroll.add_widget(news_grid); self.workspace.add_widget(news_scroll)
+        self.on_dashboard = True
 
     def bioinformatics(self):
         self.clear()
