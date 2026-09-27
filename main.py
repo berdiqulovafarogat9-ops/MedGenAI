@@ -32,15 +32,22 @@ class MedGenAI(App):
 
         root = BoxLayout(orientation="horizontal")
 
-        self.sidebar = BoxLayout(
-            orientation="vertical",
+        self.sidebar = ScrollView(
             size_hint_x=None,
             width=dp(235),
+            do_scroll_x=False,
+            bar_width=dp(4)
+        )
+        self.sidebar_box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
             padding=dp(10),
             spacing=dp(5)
         )
+        self.sidebar_box.bind(minimum_height=self.sidebar_box.setter("height"))
+        self.sidebar.add_widget(self.sidebar_box)
 
-        self.sidebar.add_widget(Label(
+        self.sidebar_box.add_widget(Label(
             text="[b]MEDGEN AI[/b]",
             markup=True,
             color=self.hex(ACCENT),
@@ -112,7 +119,7 @@ class MedGenAI(App):
             except Exception as ex:
                 self.show_error("Navigation", ex)
         b.bind(on_release=safe_command)
-        self.sidebar.add_widget(b)
+        self.sidebar_box.add_widget(b)
 
     def clear(self):
         self.workspace.clear_widgets()
@@ -134,15 +141,21 @@ class MedGenAI(App):
                 height=dp(35)
             ))
 
-    def output(self):
-        box = ScrollView()
+    def output(self, height=dp(250)):
+        box = ScrollView(
+            size_hint_y=None,
+            height=height,
+            bar_width=dp(4)
+        )
         text = TextInput(
             readonly=False,
             multiline=True,
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
             cursor_color=self.hex(TEXT),
-            font_size=14
+            font_size=14,
+            size_hint_y=None,
+            height=height
         )
         box.add_widget(text)
         self.workspace.add_widget(box)
@@ -186,7 +199,7 @@ class MedGenAI(App):
             "Computational biomedical research platform"
         )
         self.workspace.add_widget(Label(
-            text="AI + Bioinformatics + Computational Drug Discovery",
+            text="ðŸ§¬ AI + Bioinformatics + Computational Drug Discovery",
             color=self.hex(ACCENT),
             font_size=17,
             size_hint_y=None,
@@ -286,14 +299,14 @@ class MedGenAI(App):
                 "=== BIOINFORMATICS ANALYSIS ===\n\n"
                 f"Input format: {'FASTA' if fasta else 'Raw sequence'}\n"
                 f"Length: {len(s)} nt\n"
-                f"A: {a_count}  T: {t_count}  G: {g_count}  C: {c_count}  N: {n_count}\n"
+                f"A: {a_count} T: {t_count} G: {g_count} C: {c_count} N: {n_count}\n"
                 f"GC content: {gc:.2f}%\n"
                 f"AT content: {at:.2f}%\n"
                 f"GC/AT ratio: {(gc/at):.3f}\n" if at else
                 "=== BIOINFORMATICS ANALYSIS ===\n\n"
                 f"Input format: {'FASTA' if fasta else 'Raw sequence'}\n"
                 f"Length: {len(s)} nt\n"
-                f"A: {a_count}  T: {t_count}  G: {g_count}  C: {c_count}  N: {n_count}\n"
+                f"A: {a_count} T: {t_count} G: {g_count} C: {c_count} N: {n_count}\n"
                 f"GC content: {gc:.2f}%\n"
                 f"AT content: {at:.2f}%\n"
                 "GC/AT ratio: undefined (AT = 0)\n"
@@ -323,7 +336,7 @@ class MedGenAI(App):
             out.text = "=== 3-FRAME PROTEIN TRANSLATION ===\n\n"
             for f, protein in enumerate(proteins, 1):
                 out.text += f"Frame +{f}:\n{protein}\n\n"
-            out.text += "Stop codon = *   Unknown codon = X"
+            out.text += "Stop codon = * Unknown codon = X"
 
         def show_orfs(instance):
             s, _ = clean_sequence(seq.text)
@@ -528,11 +541,11 @@ class MedGenAI(App):
                     f"H-bond Donors (HBD): {hbd}",
                     f"H-bond Acceptors (HBA): {hba}",
                     f"Approx. Rotatable Bonds: {rot}",
-                    f"Approx. TPSA: {tpsa:.1f} Å²", "",
+                    f"Approx. TPSA: {tpsa:.1f} Ã…Â²", "",
                     "=== FILTERS ===",
                 ]
                 for name, ok in checks.items():
-                    lines.append(f"{'PASS' if ok else 'FAIL'}  {name}")
+                    lines.append(f"{'PASS' if ok else 'FAIL'} {name}")
                 lines.extend([
                     "",
                     f"Filters passed: {passed}/{len(checks)}", "",
@@ -574,7 +587,7 @@ class MedGenAI(App):
         out = self.output()
         out.text = (
             "=== VIRTUAL LABORATORY ===\n\n"
-            "Target → PDB → Pocket → Docking → ML → Report\n\n"
+            "Target â†’ PDB â†’ Pocket â†’ Docking â†’ ML â†’ Report\n\n"
             "Har bir bosqichni quyidagi tugmalar orqali oching."
         )
         self.button("PDB ANALYSIS", lambda x: self.pdb_analysis())
@@ -593,6 +606,8 @@ class MedGenAI(App):
         ))
         query = TextInput(
             multiline=True,
+            size_hint_y=None,
+            height=dp(130),
             background_color=self.hex(INPUT),
             foreground_color=self.hex(TEXT),
             cursor_color=self.hex(TEXT),
@@ -762,7 +777,7 @@ class MedGenAI(App):
                 warnings.append("Cysteine mavjud; disulfide bondlar biologik kontekstga bog'liq.")
 
             result = [
-                "STRUCTURE PREDICTION — SEQUENCE CHECK", "",
+                "STRUCTURE PREDICTION â€” SEQUENCE CHECK", "",
                 f"Length: {length} aa",
                 f"Hydrophobic residues: {hydrophobic} ({hydrophobic / length * 100:.1f}%)",
                 f"Positive (K/R/H): {pos}", f"Negative (D/E): {neg}",
@@ -839,7 +854,7 @@ class MedGenAI(App):
         self.button("OPEN COLABFOLD", open_colab)
 
         self.workspace.add_widget(Label(
-            text="MedGen AI → Validate → ColabFold → PDB → PDB Analysis",
+            text="MedGen AI â†’ Validate â†’ ColabFold â†’ PDB â†’ PDB Analysis",
             color=self.hex(ACCENT), font_size=14, size_hint_y=None, height=dp(40)
         ))
 
@@ -847,8 +862,10 @@ class MedGenAI(App):
         self.clear()
         self.page_title(
             "PDB Structure Analysis",
-            "Protein structure inspection & statistics"
+            "Import predicted protein structure"
         )
+
+        out = self.output()
 
         self.workspace.add_widget(Label(
             text="PDB fayl yo'lini kiriting:",
@@ -866,138 +883,49 @@ class MedGenAI(App):
             height=dp(50)
         )
         self.workspace.add_widget(path)
-        out = self.output()
 
-        last_report = {"text": ""}
-
-        def analyze_pdb(instance):
+        def load(instance):
             f = path.text.strip()
+
             if not os.path.isfile(f):
                 out.text = "PDB file topilmadi:\n" + f
                 return
 
             try:
-                atoms = 0
-                hetatm = 0
-                residues = set()
-                chains = set()
-                residue_counts = {}
-                element_counts = {}
-                b_values = []
-                occupancy_values = []
-                models = 0
-                title_lines = []
-                seqres = 0
+                with open(
+                    f,
+                    encoding="utf-8",
+                    errors="ignore"
+                ) as fh:
+                    data = fh.read()
 
-                with open(f, encoding="utf-8", errors="ignore") as fh:
-                    for line in fh:
-                        rec = line[:6].strip()
-                        if rec == "TITLE" and len(title_lines) < 3:
-                            title_lines.append(line[10:].strip())
-                        elif rec == "MODEL":
-                            models += 1
-                        elif rec == "SEQRES":
-                            seqres += 1
-                        elif rec in ("ATOM", "HETATM") and len(line) >= 54:
-                            if rec == "ATOM":
-                                atoms += 1
-                            else:
-                                hetatm += 1
-
-                            chain = line[21].strip() or "_"
-                            resname = line[17:20].strip() or "UNK"
-                            resseq = line[22:26].strip()
-                            icode = line[26].strip()
-                            residue_key = (chain, resseq, icode, resname)
-                            residues.add(residue_key)
-                            chains.add(chain)
-                            residue_counts[chain] = residue_counts.get(chain, 0) + (1 if rec == "ATOM" else 0)
-
-                            element = line[76:78].strip().upper() if len(line) >= 78 else ""
-                            if not element:
-                                atom_name = line[12:16].strip().upper()
-                                element = atom_name[0] if atom_name else "?"
-                            element_counts[element] = element_counts.get(element, 0) + 1
-
-                            try:
-                                b_values.append(float(line[60:66]))
-                            except Exception:
-                                pass
-                            try:
-                                occupancy_values.append(float(line[54:60]))
-                            except Exception:
-                                pass
-
-                protein_residues = {r for r in residues if r[3] not in ("HOH", "WAT")}
-                chain_lengths = {}
-                for chain in chains:
-                    chain_lengths[chain] = len({
-                        (r[1], r[2]) for r in protein_residues if r[0] == chain
-                    })
-
-                def avg(values):
-                    return sum(values) / len(values) if values else 0.0
-
-                def minmax(values):
-                    return (min(values), max(values)) if values else (0.0, 0.0)
-
-                bmin, bmax = minmax(b_values)
-                omin, omax = minmax(occupancy_values)
-                title = " ".join(title_lines).strip() or "Not provided"
-                chain_text = ", ".join(
-                    f"{c}: {chain_lengths[c]} residues" for c in sorted(chain_lengths)
-                ) or "None"
-                element_text = ", ".join(
-                    f"{e}: {n}" for e, n in sorted(element_counts.items())
+                lines = data.splitlines()
+                atoms = sum(
+                    1 for x in lines
+                    if x.startswith(("ATOM ", "HETATM"))
                 )
 
-                report = (
-                    "=== PDB STRUCTURE ANALYSIS ===\n\n"
+                residues = set()
+
+                for x in lines:
+                    if x.startswith("ATOM ") and len(x) >= 26:
+                        residues.add(x[17:26].strip())
+
+                out.text = (
+                    "=== PDB STRUCTURE ===\n\n"
                     f"File: {os.path.basename(f)}\n"
                     f"Path: {f}\n"
-                    f"Title: {title}\n\n"
-                    "STRUCTURE\n"
-                    f"ATOM records: {atoms}\n"
-                    f"HETATM records: {hetatm}\n"
-                    f"Unique residues: {len(protein_residues)}\n"
-                    f"Chains: {len(chains)}\n"
-                    f"Models: {models if models else 1}\n"
-                    f"SEQRES records: {seqres}\n\n"
-                    "CHAIN LENGTHS\n"
-                    f"{chain_text}\n\n"
-                    "B-FACTOR\n"
-                    f"Mean: {avg(b_values):.2f}\n"
-                    f"Min: {bmin:.2f}\n"
-                    f"Max: {bmax:.2f}\n\n"
-                    "OCCUPANCY\n"
-                    f"Mean: {avg(occupancy_values):.3f}\n"
-                    f"Min: {omin:.3f}\n"
-                    f"Max: {omax:.3f}\n\n"
-                    "ELEMENTS\n"
-                    f"{element_text or 'Not available'}\n\n"
+                    f"Atoms: {atoms}\n"
+                    f"Residues: {len(residues)}\n\n"
                     "STATUS: PDB LOADED\n\n"
-                    "NEXT WORKFLOW\n"
-                    "PDB → Binding Pocket → Docking → ML/Ranking → Report"
+                    "Next workflow:\n"
+                    "PDB â†’ Pocket Analysis â†’ Docking â†’ ML â†’ Ranking"
                 )
-                last_report["text"] = report
-                out.text = report
-            except Exception as ex:
-                self.show_error("PDB Analysis", ex)
 
-        def save_report(instance):
-            if not last_report["text"]:
-                out.text = "Avval PDB faylini ANALYZE qiling."
-                return
-            try:
-                report_path = os.path.join(self.user_data_dir, "pdb_analysis_report.txt")
-                with open(report_path, "w", encoding="utf-8") as fh:
-                    fh.write(last_report["text"])
-                out.text = last_report["text"] + f"\n\nSaved: {report_path}"
             except Exception as ex:
-                self.show_error("Save PDB report", ex)
+                out.text = "PDB Error:\n\n" + str(ex)
 
-        self.button("ANALYZE PDB", analyze_pdb)
-        self.button("SAVE REPORT", save_report)
+        self.button("LOAD PDB", load)
 
     def pocket_analysis(self):
         self.clear()
@@ -1045,7 +973,7 @@ class MedGenAI(App):
                     errors="ignore"
                 ) as fh:
                     for x in fh:
-                        if not x.startswith("ATOM  "):
+                        if not x.startswith("ATOM "):
                             continue
 
                         atoms += 1
@@ -1075,14 +1003,14 @@ class MedGenAI(App):
                     "=== BINDING POCKET ANALYSIS ===\n\n"
                     f"PDB: {os.path.basename(f)}\n"
                     f"Pocket center: {center}\n"
-                    f"Radius: {radius} Å\n\n"
+                    f"Radius: {radius} Ã…\n\n"
                     f"Protein atoms: {atoms}\n"
                     f"Nearby atoms: {nearby}\n"
                     f"Nearby residues: {len(residues)}\n\n"
                     "RESIDUES:\n" +
                     ", ".join(sorted(residues)) +
                     "\n\nWORKFLOW:\n"
-                    "6WC8 → Pocket → Docking → ML → Ranking"
+                    "6WC8 â†’ Pocket â†’ Docking â†’ ML â†’ Ranking"
                 )
 
             except Exception as ex:
@@ -1099,46 +1027,7 @@ class MedGenAI(App):
 
         out = self.output()
 
-        out.text = """=== MOLECULAR DOCKING ===
-
-Target: HIV-1 Integrase
-PDB: 6WC8
-Ligand: TQM
-
-Engine: AutoDock Vina
-Scoring function: Vina
-
-Pocket center:
-X = 16.019
-Y = 18.428
-Z = 12.185
-
-Box: 20 × 20 × 20 Å
-Exhaustiveness: 8
-
-DOCKING RESULTS
-------------------------------
-Mode 1   -5.996 kcal/mol
-Mode 2   -5.951 kcal/mol
-Mode 3   -5.937 kcal/mol
-Mode 4   -5.792 kcal/mol
-Mode 5   -5.775 kcal/mol
-Mode 6   -5.700 kcal/mol
-Mode 7   -5.669 kcal/mol
-Mode 8   -5.667 kcal/mol
-Mode 9   -5.498 kcal/mol
-Mode 10  -5.246 kcal/mol
-
-BEST DOCKING SCORE
-------------------------------
--5.996 kcal/mol
-
-STATUS: COMPUTATIONAL RESULT
-
-Note:
-This is a computational docking score,
-not experimental binding affinity or clinical efficacy.
-"""
+        out.text = """=== MOLECULAR DOCKING === Target: HIV-1 Integrase PDB: 6WC8 Ligand: TQM Engine: AutoDock Vina Scoring function: Vina Pocket center: X = 16.019 Y = 18.428 Z = 12.185 Box: 20 Ã— 20 Ã— 20 Ã… Exhaustiveness: 8 DOCKING RESULTS ------------------------------ Mode 1 -5.996 kcal/mol Mode 2 -5.951 kcal/mol Mode 3 -5.937 kcal/mol Mode 4 -5.792 kcal/mol Mode 5 -5.775 kcal/mol Mode 6 -5.700 kcal/mol Mode 7 -5.669 kcal/mol Mode 8 -5.667 kcal/mol Mode 9 -5.498 kcal/mol Mode 10 -5.246 kcal/mol BEST DOCKING SCORE ------------------------------ -5.996 kcal/mol STATUS: COMPUTATIONAL RESULT Note: This is a computational docking score, not experimental binding affinity or clinical efficacy. """
 
         self.button("REFRESH RESULT",
                      lambda x: None)
@@ -1146,63 +1035,14 @@ not experimental binding affinity or clinical efficacy.
     def ml_ranking_report(self):
         self.clear()
         self.page_title(
-            "ML • Ranking • Report",
+            "ML â€¢ Ranking â€¢ Report",
             "Computational candidate analysis"
         )
 
         out = self.output()
 
         def run(instance):
-            analysis_text = """=== MEDGEN AI FINAL ANALYSIS ===
-
-Target: HIV-1 Integrase
-PDB: 6WC8
-Docking: AutoDock Vina
-ML: Random Forest ESOL
-
-TOP CANDIDATES
-
-1. CC(C)O
-   Docking: -2.477 kcal/mol
-   ESOL logS: 0.528
-   Similarity: 20.00%
-   Final score: 0.556
-
-2. CCCN
-   Docking: -2.487 kcal/mol
-   ESOL logS: 0.706
-   Similarity: 27.27%
-   Final score: 0.556
-
-3. CCCCN
-   Docking: -2.714 kcal/mol
-   ESOL logS: 0.049
-   Similarity: 21.43%
-   Final score: 0.537
-
-4. CCN
-   Docking: -2.063 kcal/mol
-   ESOL logS: 0.991
-   Similarity: 33.33%
-   Final score: 0.530
-
-5. CC(C)CO
-   Docking: -2.567 kcal/mol
-   ESOL logS: 0.125
-   Similarity: 36.36%
-   Final score: 0.501
-
-=== REPORT ===
-
-Workflow:
-Target → PDB → Pocket → Docking → ML → Ranking
-
-STATUS: COMPUTATIONAL ANALYSIS COMPLETED
-
-Note:
-Docking scores and ML predictions are computational results,
-not experimental binding affinity or clinical efficacy.
-"""
+            analysis_text = """=== MEDGEN AI FINAL ANALYSIS === Target: HIV-1 Integrase PDB: 6WC8 Docking: AutoDock Vina ML: Random Forest ESOL TOP CANDIDATES 1. CC(C)O Docking: -2.477 kcal/mol ESOL logS: 0.528 Similarity: 20.00% Final score: 0.556 2. CCCN Docking: -2.487 kcal/mol ESOL logS: 0.706 Similarity: 27.27% Final score: 0.556 3. CCCCN Docking: -2.714 kcal/mol ESOL logS: 0.049 Similarity: 21.43% Final score: 0.537 4. CCN Docking: -2.063 kcal/mol ESOL logS: 0.991 Similarity: 33.33% Final score: 0.530 5. CC(C)CO Docking: -2.567 kcal/mol ESOL logS: 0.125 Similarity: 36.36% Final score: 0.501 === REPORT === Workflow: Target â†’ PDB â†’ Pocket â†’ Docking â†’ ML â†’ Ranking STATUS: COMPUTATIONAL ANALYSIS COMPLETED Note: Docking scores and ML predictions are computational results, not experimental binding affinity or clinical efficacy. """
 
             out.text = analysis_text
 
