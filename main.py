@@ -5,6 +5,7 @@ import os
 import webbrowser
 import threading
 import urllib.request
+import urllib.parse
 import xml.etree.ElementTree as ET
 
 from kivy.clock import Clock
@@ -18,6 +19,8 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.popup import Popup
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Ellipse, Line
 
 BG = "#07111F"
 PANEL = "#0D1B2A"
@@ -27,6 +30,77 @@ TEXT = "#EAF4FF"
 MUTED = "#8FA8BC"
 
 HISTORY_FILE = "medgen_history.json"
+
+
+class Molecule3DView(Widget):
+    def __init__(self, atoms=None, **kwargs):
+        super().__init__(**kwargs)
+        self.atoms = atoms or []
+        self.yaw = 0.45
+        self.pitch = 0.25
+        self.scale = 6.0
+        self.last_touch = None
+        self.bind(pos=lambda *_: self.redraw(), size=lambda *_: self.redraw())
+        self.redraw()
+
+    def set_atoms(self, atoms):
+        self.atoms = atoms or []
+        self.redraw()
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            self.last_touch = touch.pos
+            return True
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if self.last_touch is not None:
+            dx = touch.x - self.last_touch[0]
+            dy = touch.y - self.last_touch[1]
+            self.yaw += dx * 0.01
+            self.pitch += dy * 0.008
+            self.last_touch = touch.pos
+            self.redraw()
+            return True
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        self.last_touch = None
+        return super().on_touch_up(touch)
+
+    def _project(self, x, y, z):
+        import math
+        cy, sy = math.cos(self.yaw), math.sin(self.yaw)
+        cp, sp = math.cos(self.pitch), math.sin(self.pitch)
+        x1 = x * cy - z * sy
+        z1 = x * sy + z * cy
+        y1 = y * cp - z1 * sp
+        z2 = y * sp + z1 * cp
+        px = self.center_x + x1 * self.scale
+        py = self.center_y + y1 * self.scale
+        return px, py, z2
+
+    def redraw(self):
+        self.canvas.clear()
+        if not self.atoms:
+            return
+        pts=[]
+        for a in self.atoms:
+            try:
+                pts.append((*self._project(a[0],a[1],a[2]), a[3] if len(a)>3 else 'C'))
+            except Exception:
+                pass
+        if not pts: return
+        # bonds: connect sequential backbone/atoms for a readable molecular path
+        Color(0.25,0.75,0.95,0.75)
+        for i in range(len(pts)-1):
+            x1,y1,_=pts[i]; x2,y2,_=pts[i+1]
+            Line(points=[x1,y1,x2,y2], width=1.2)
+        # atoms, depth sorted
+        for x,y,z,elem in sorted(pts,key=lambda t:t[2]):
+            r=max(3.0, min(10.0, 7.0/(1+0.015*max(-z,0))))
+            Color(0.2,0.85,1,0.9) if elem=='C' else Color(1,0.45,0.35,0.95)
+            Ellipse(pos=(x-r,y-r), size=(2*r,2*r))
 
 
 class MedGenAI(App):
@@ -56,21 +130,22 @@ class MedGenAI(App):
         menu.bind(on_release=lambda *_: self.open_menu())
         header.add_widget(menu)
         header.add_widget(Label(text="[b]MEDGEN AI[/b]", markup=True, color=self.hex(ACCENT), font_size=21, size_hint_x=None, width=dp(145)))
-        self.search_box = TextInput(hint_text="Disease, gene, protein, drug, PDB, research...", multiline=False, background_color=self.hex(INPUT), foreground_color=self.hex(TEXT), cursor_color=self.hex(TEXT), font_size=14)
+        self.search_box = TextInput(hint_text=self.tr("search"), multiline=False, background_color=self.hex(INPUT), foreground_color=self.hex(TEXT), cursor_color=self.hex(TEXT), font_size=14)
         self.search_box.bind(on_text_validate=lambda *_: self.search_global())
         header.add_widget(self.search_box)
         search_btn = Button(text="🔎", size_hint_x=None, width=dp(54), background_normal="", background_color=self.hex(ACCENT), color=self.hex(BG))
         search_btn.bind(on_release=lambda *_: self.search_global())
         header.add_widget(search_btn)
-        lang = Button(text="UZ", size_hint_x=None, width=dp(58), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
-        lang.bind(on_release=lambda *_: self.open_language())
-        header.add_widget(lang)
+        self.lang_btn = Button(text="UZ", size_hint_x=None, width=dp(58), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
+        self.lang_btn.bind(on_release=lambda *_: self.open_language())
+        header.add_widget(self.lang_btn)
         root.add_widget(header)
 
         self.workspace = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
         root.add_widget(self.workspace)
         self.dashboard()
         Clock.schedule_once(lambda *_: self.refresh_news(), 0.5)
+        Clock.schedule_interval(lambda *_: self.refresh_news(), 3600)
         return root
 
     def _install_exception_hook(self):
@@ -89,9 +164,37 @@ class MedGenAI(App):
         value = value.lstrip("#")
         return tuple(int(value[i:i+2], 16)/255 for i in (0,2,4)) + (1,)
 
+
+    LANG = {
+        "uz": {
+            "home":"Bosh sahifa","news":"So‘nggi yangiliklar","modules":"Modullar","saved":"Saqlanganlar","collections":"Kolleksiyalar","settings":"Sozlamalar","language":"Til","search":"Kasallik, gen, protein, dori, PDB yoki maqola...","search_title":"Ilmiy qidiruv","latest":"So‘nggi biomedical yangiliklar","open":"Ochish","close":"Yopish","back":"Bosh sahifaga qaytish","refresh":"Yangilash","open_source":"Manbani ochish","no_results":"Natija topilmadi","loading":"Ma’lumot yuklanmoqda...","virtual":"Virtual Laboratory","viewer2d":"2D ko‘rinish","viewer3d":"3D molekulyar ko‘rish","load_pdb":"PDB yuklash","demo":"Demo model","pdb_path":"PDB fayl yo‘li","news_source":"Manba","global":"Global biomedical research portal","bioinformatics":"Bioinformatics","drug_discovery":"Drug Discovery","structure_prediction":"Structure Prediction","pdb_analysis":"PDB Analysis","binding_pocket":"Binding Pocket","docking":"Docking","ml_ranking":"ML + Ranking","research_assistant":"Research Assistant","results_history":"Results & History","analyze":"Tahlil qilish","analyze_sequence":"Ketma-ketlikni tahlil qilish","analyze_pocket":"Pocketni tahlil qilish","clear":"Tozalash","copy_sequence":"Ketma-ketlikni nusxalash","find_orfs":"ORF topish","load_pdb":"PDB yuklash","prepare_workflow":"Workflow tayyorlash","refresh_result":"Natijani yangilash","reverse_complement":"Reverse Complement","save_fasta":"FASTA saqlash","save_report":"Hisobotni saqlash","screen_molecule":"Molekulani tekshirish","translate_protein":"Protein tarjimasi","open_colabfold":"ColabFold ochish","search_hint":"Qidiruv natijalari: Disease • Gene • Protein • Drug • PDB • Research • News"},
+        "ru": {
+        "home":"Главная","news":"Последние новости","modules":"Модули","saved":"Сохранённые","collections":"Коллекции","settings":"Настройки","language":"Язык","search":"Болезнь, ген, белок, препарат, PDB или статья...","search_title":"Научный поиск","latest":"Последние биомедицинские новости","open":"Открыть","close":"Закрыть","back":"На главную","refresh":"Обновить","open_source":"Открыть источник","no_results":"Ничего не найдено","loading":"Загрузка данных...","virtual":"Виртуальная лаборатория","viewer2d":"2D вид","viewer3d":"3D молекулярный просмотр","load_pdb":"Загрузить PDB","demo":"Демо-модель","pdb_path":"Путь к PDB","news_source":"Источник","global":"Глобальный портал биомедицинских исследований","bioinformatics":"Биоинформатика","drug_discovery":"Поиск лекарств","structure_prediction":"Предсказание структуры","pdb_analysis":"Анализ PDB","binding_pocket":"Анализ кармана","docking":"Докинг","ml_ranking":"ML и ранжирование","research_assistant":"Научный помощник","results_history":"Результаты и история","analyze":"Анализировать","analyze_sequence":"Анализировать последовательность","analyze_pocket":"Анализ кармана","clear":"Очистить","copy_sequence":"Копировать последовательность","find_orfs":"Найти ORF","load_pdb":"Загрузить PDB","prepare_workflow":"Подготовить workflow","refresh_result":"Обновить результат","reverse_complement":"Обратный комплемент","save_fasta":"Сохранить FASTA","save_report":"Сохранить отчёт","screen_molecule":"Проверить молекулу","translate_protein":"Транслировать белок","open_colabfold":"Открыть ColabFold","search_hint":"Поиск: Disease • Gene • Protein • Drug • PDB • Research • News"},
+        "en": {
+        "home":"Home","news":"Latest News","modules":"Modules","saved":"Saved","collections":"Collections","settings":"Settings","language":"Language","search":"Disease, gene, protein, drug, PDB or research...","search_title":"Scientific Search","latest":"Latest biomedical news","open":"Open","close":"Close","back":"Back to Home","refresh":"Refresh","open_source":"Open Source","no_results":"No results found","loading":"Loading data...","virtual":"Virtual Laboratory","viewer2d":"2D view","viewer3d":"3D molecular viewer","load_pdb":"Load PDB","demo":"Demo model","pdb_path":"PDB file path","news_source":"Source","global":"Global biomedical research portal","bioinformatics":"Bioinformatics","drug_discovery":"Drug Discovery","structure_prediction":"Structure Prediction","pdb_analysis":"PDB Analysis","binding_pocket":"Binding Pocket","docking":"Docking","ml_ranking":"ML + Ranking","research_assistant":"Research Assistant","results_history":"Results & History","analyze":"Analyze","analyze_sequence":"Analyze Sequence","analyze_pocket":"Analyze Pocket","clear":"Clear","copy_sequence":"Copy Sequence","find_orfs":"Find ORFs","load_pdb":"Load PDB","prepare_workflow":"Prepare Workflow","refresh_result":"Refresh Result","reverse_complement":"Reverse Complement","save_fasta":"Save FASTA","save_report":"Save Report","screen_molecule":"Screen Molecule","translate_protein":"Translate Protein","open_colabfold":"Open ColabFold","search_hint":"Search: Disease • Gene • Protein • Drug • PDB • Research • News"}}
+
+    def tr(self, key, fallback=None):
+        return self.LANG.get(getattr(self, 'language', 'uz'), self.LANG['uz']).get(key, fallback or key)
+
+    def tx(self, text):
+        if text in self.LANG.get(getattr(self, 'language', 'uz'), {}):
+            return self.tr(text)
+        maps={
+            "DASHBOARDGA QAYTISH":"back","BACK HOME":"back","OPEN SOURCE":"open_source","CLOSE":"close",
+            "REFRESH":"refresh","Open module":"open","Experiment workspace":"virtual",
+            "Virtual Laboratory":"virtual","Global Search":"search_title","Latest Biomedical News":"latest",
+            "Modules & Sections":"modules","Disease • Gene • Protein • Drug • PDB • Research • News":"search_hint",
+            "Bioinformatics":"bioinformatics","Drug Discovery":"drug_discovery","Structure Prediction":"structure_prediction",
+            "PDB Analysis":"pdb_analysis","Binding Pocket":"binding_pocket","Docking":"docking","ML + Ranking":"ml_ranking",
+            "Research Assistant":"research_assistant","Results & History":"results_history",
+            "ANALYZE":"analyze","ANALYZE SEQUENCE":"analyze_sequence","ANALYZE POCKET":"analyze_pocket","CLEAR":"clear","COPY SEQUENCE":"copy_sequence","FIND ORFs":"find_orfs","LOAD PDB":"load_pdb","PREPARE WORKFLOW":"prepare_workflow","REFRESH RESULT":"refresh_result","REVERSE COMPLEMENT":"reverse_complement","SAVE FASTA":"save_fasta","SAVE REPORT":"save_report","SCREEN MOLECULE":"screen_molecule","TRANSLATE PROTEIN":"translate_protein","OPEN COLABFOLD":"open_colabfold",
+            "Open module":"open","PDB ANALYSIS":"PDB Analysis","POCKET ANALYSIS":"Binding Pocket","DOCKING":"Docking","ML + REPORT":"ML + Ranking",
+            "SCREEN MOLECULE":"SCREEN MOLECULE","SAVE REPORT":"SAVE REPORT","CLEAR":"CLEAR","ANALYZE":"ANALYZE","VALIDATE":"VALIDATE","COPY FASTA":"COPY FASTA","OPEN COLABFOLD":"OPEN COLABFOLD","SAVE FASTA":"SAVE FASTA","FIND ORFS":"FIND ORFS","REVERSE COMPLEMENT":"REVERSE COMPLEMENT","TRANSLATE 3 FRAMES":"TRANSLATE 3 FRAMES"}
+        return self.tr(maps[text]) if text in maps else text
+
     def add_nav(self, text, command):
         b = Button(
-            text=text,
+            text=self.tx(text),
             size_hint_y=None,
             height=dp(48),
             background_normal="",
@@ -111,21 +214,9 @@ class MedGenAI(App):
         self.workspace.clear_widgets()
 
     def page_title(self, text, sub=""):
-        self.workspace.add_widget(Label(
-            text=f"[b]{text}[/b]",
-            markup=True,
-            color=self.hex(TEXT),
-            font_size=25,
-            size_hint_y=None,
-            height=dp(45)
-        ))
+        self.workspace.add_widget(Label(text=f"[b]{self.tx(text)}[/b]", markup=True, color=self.hex(TEXT), font_size=25, size_hint_y=None, height=dp(45)))
         if sub:
-            self.workspace.add_widget(Label(
-                text=sub,
-                color=self.hex(MUTED),
-                size_hint_y=None,
-                height=dp(35)
-            ))
+            self.workspace.add_widget(Label(text=self.tx(sub), color=self.hex(MUTED), size_hint_y=None, height=dp(35)))
 
     def output(self):
         box = ScrollView()
@@ -143,7 +234,7 @@ class MedGenAI(App):
 
     def button(self, text, command):
         b = Button(
-            text=text,
+            text=self.tx(text),
             size_hint_y=None,
             height=dp(52),
             background_normal="",
@@ -173,125 +264,137 @@ class MedGenAI(App):
         self.button("DASHBOARDGA QAYTISH", lambda x: self.dashboard())
 
     def card_button(self, icon, title, subtitle, command):
-        b = Button(text=f"{icon}  [b]{title}[/b]\n[size=12]{subtitle}[/size]", markup=True, background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT), halign="left", valign="middle", size_hint_y=None, height=dp(92))
+        b=Button(text=f"{icon}  [b]{self.tx(title)}[/b]\n[size=12]{self.tx(subtitle)}[/size]", markup=True, background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT), halign="left", valign="middle", size_hint_y=None, height=dp(92))
         b.bind(on_release=lambda *_: command())
         return b
 
     def open_menu(self):
-        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(5))
-        title = Label(text="[b]MEDGEN AI[/b]\nModules & Sections", markup=True, color=self.hex(ACCENT), size_hint_y=None, height=dp(60))
-        box.add_widget(title)
-        for icon, name, cmd in self.modules:
-            b = Button(text=f"{icon}  {name}", size_hint_y=None, height=dp(44), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
-            b.bind(on_release=lambda inst, c=cmd: (self._close_menu(), c()))
+        box=BoxLayout(orientation="vertical",padding=dp(12),spacing=dp(5))
+        box.add_widget(Label(text="[b]MEDGEN AI[/b]\n"+self.tr("modules"),markup=True,color=self.hex(ACCENT),size_hint_y=None,height=dp(60)))
+        fixed=[("🏠",self.tr("home"),self.dashboard),("📰",self.tr("news"),self.show_news_home),("🧰",self.tr("modules"),self.dashboard),("❤️",self.tr("saved"),self.results_history),("📚",self.tr("collections"),self.research_assistant)]
+        for icon,name,cmd in fixed:
+            b=Button(text=f"{icon}  {name}",size_hint_y=None,height=dp(44),background_normal="",background_color=self.hex(PANEL),color=self.hex(TEXT))
+            b.bind(on_release=lambda inst,c=cmd:(self._close_menu(),c()))
             box.add_widget(b)
-        close = Button(text="CLOSE", size_hint_y=None, height=dp(44), background_normal="", background_color=self.hex(ACCENT), color=self.hex(BG))
-        close.bind(on_release=lambda *_: self._close_menu())
-        box.add_widget(close)
-        self.menu_popup = Popup(title="", content=box, size_hint=(0.82, 0.88), background_color=self.hex(BG), separator_color=self.hex(ACCENT))
-        self.menu_popup.open()
+        for icon,name,cmd in self.modules:
+            b=Button(text=f"{icon}  {self.tx(name)}",size_hint_y=None,height=dp(42),background_normal="",background_color=self.hex(PANEL),color=self.hex(TEXT))
+            b.bind(on_release=lambda inst,c=cmd:(self._close_menu(),c()))
+            box.add_widget(b)
+        close=Button(text=self.tr("close"),size_hint_y=None,height=dp(44),background_normal="",background_color=self.hex(ACCENT),color=self.hex(BG))
+        close.bind(on_release=lambda *_:self._close_menu()); box.add_widget(close)
+        self.menu_popup=Popup(title="",content=ScrollView(),size_hint=(0.86,0.92),background_color=self.hex(BG),separator_color=self.hex(ACCENT))
+        self.menu_popup.content.add_widget(box); self.menu_popup.open()
+
 
     def _close_menu(self):
         if getattr(self, "menu_popup", None):
             self.menu_popup.dismiss()
 
     def open_language(self):
-        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
-        for code, name in (("uz", "🇺🇿 O‘zbek"), ("ru", "🇷🇺 Русский"), ("en", "🇬🇧 English")):
-            b = Button(text=name, size_hint_y=None, height=dp(50), background_normal="", background_color=self.hex(PANEL), color=self.hex(TEXT))
-            b.bind(on_release=lambda inst, c=code: self.set_language(c))
-            box.add_widget(b)
-        self.lang_popup = Popup(title="Language / Til", content=box, size_hint=(0.75, 0.42))
-        self.lang_popup.open()
+        box=BoxLayout(orientation="vertical",padding=dp(12),spacing=dp(8))
+        for code,name in (("uz","🇺🇿 O‘zbek"),("ru","🇷🇺 Русский"),("en","🇬🇧 English")):
+            b=Button(text=name,size_hint_y=None,height=dp(50),background_normal="",background_color=self.hex(PANEL),color=self.hex(TEXT))
+            b.bind(on_release=lambda inst,c=code:self.set_language(c)); box.add_widget(b)
+        self.lang_popup=Popup(title=self.tr("language"),content=box,size_hint=(0.75,0.42)); self.lang_popup.open()
+
 
     def set_language(self, code):
-        self.language = code
-        self.lang_popup.dismiss()
+        self.language=code
+        if getattr(self,"lang_popup",None): self.lang_popup.dismiss()
+        self.search_box.hint_text=self.tr("search")
+        self.lang_btn.text=code.upper()
         self.dashboard()
 
+
     def search_global(self):
-        q = self.search_box.text.strip().lower()
-        if not q:
-            self.dashboard(); return
-        self.clear()
-        self.page_title("Global Search", "Disease • Gene • Protein • Drug • PDB • Research • News")
-        found = []
-        for icon, name, cmd in self.modules:
-            if q in name.lower():
-                found.append((icon, name, "Module", cmd))
-        for item in getattr(self, "news_items", []):
-            if q in (item[0] + " " + item[1] + " " + item[2]).lower():
-                found.append(("📰", item[0], item[2], lambda item=item: self.show_news(item)))
-        if not found:
-            self.workspace.add_widget(Label(text=f"No results for: {q}", color=self.hex(MUTED), size_hint_y=None, height=dp(50)))
-            return
-        grid = GridLayout(cols=1, spacing=dp(7), size_hint_y=None)
-        grid.bind(minimum_height=grid.setter("height"))
-        for icon, title, sub, cmd in found:
-            grid.add_widget(self.card_button(icon, title, sub, cmd))
-        scroll = ScrollView()
-        scroll.add_widget(grid)
-        self.workspace.add_widget(scroll)
+        q=self.search_box.text.strip()
+        if not q: self.dashboard(); return
+        self.clear(); self.page_title("search_title",self.tr("search_hint"))
+        out=self.output(); out.text=self.tr("loading")+"\n\n"+q
+        threading.Thread(target=self._online_search,args=(q,),daemon=True).start()
+
+    def _online_search(self,q):
+        import urllib.parse, json
+        results=[]
+        def esearch(db,term,label):
+            try:
+                params=urllib.parse.urlencode({"db":db,"term":term,"retmax":5,"retmode":"json","tool":"MedGenAI","email":"medgenai@example.com"})
+                u="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"+params
+                data=json.loads(urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"MedGenAI/1.0"}),timeout=10).read().decode())
+                ids=data.get("esearchresult",{}).get("idlist",[])
+                if ids: results.append((label,ids))
+            except Exception: pass
+        esearch("pubmed",q,"Research / PubMed")
+        esearch("gene",q,"Gene")
+        esearch("protein",q,"Protein")
+        esearch("structure",q,"PDB / Structure")
+        Clock.schedule_once(lambda *_:self._show_search_results(q,results),0)
+
+    def _show_search_results(self,q,results):
+        self.clear(); self.page_title("search_title",q)
+        if not results:
+            self.workspace.add_widget(Label(text=self.tr("no_results"),color=self.hex(MUTED),size_hint_y=None,height=dp(55)))
+            self.button(self.tr("back"),lambda *_:self.dashboard()); return
+        for label,ids in results:
+            card=self.card_button("🔎",label,f"{len(ids)} results",lambda db=label,ids=ids:self._open_ncbi_results(db,ids))
+            self.workspace.add_widget(card)
+        self.button(self.tr("back"),lambda *_:self.dashboard())
+
+    def _open_ncbi_results(self,label,ids):
+        db={"Research / PubMed":"pubmed","Gene":"gene","Protein":"protein","PDB / Structure":"structure"}.get(label,"pubmed")
+        url="https://www.ncbi.nlm.nih.gov/"+({"pubmed":"pubmed","gene":"gene","protein":"protein","structure":"structure"}.get(db,db))+"/?term="+urllib.parse.quote(self.search_box.text.strip())
+        webbrowser.open(url)
+
 
     def refresh_news(self):
-        self.news_items = []
-        self._news_loading = True
-        threading.Thread(target=self._fetch_news, daemon=True).start()
+        self.news_items=[]; threading.Thread(target=self._fetch_news,daemon=True).start()
 
     def _fetch_news(self):
-        feeds = [
-            ("NIH", "https://www.nih.gov/news-events/news-releases/rss.xml"),
-            ("WHO", "https://www.who.int/feeds/entity/mediacentre/news/en/rss.xml"),
-        ]
-        items = []
-        for source, url in feeds:
+        feeds=[("NIH","https://www.nih.gov/news-events/news-releases/rss.xml"),("WHO","https://www.who.int/feeds/entity/mediacentre/news/en/rss.xml")]
+        items=[]
+        for source,url in feeds:
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "MedGenAI/1.0"})
-                data = urllib.request.urlopen(req, timeout=8).read()
-                root = ET.fromstring(data)
-                for it in root.findall(".//item")[:8]:
-                    title = (it.findtext("title") or "").strip()
-                    link = (it.findtext("link") or "").strip()
-                    pub = (it.findtext("pubDate") or "").strip()
-                    if title:
-                        items.append((title, link, f"{source} • {pub}"))
-            except Exception:
-                pass
-        Clock.schedule_once(lambda *_: self._apply_news(items), 0)
+                data=urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"MedGenAI/1.0"}),timeout=10).read()
+                root=ET.fromstring(data)
+                for it in root.findall(".//item")[:12]:
+                    title=(it.findtext("title") or "").strip(); link=(it.findtext("link") or "").strip(); pub=(it.findtext("pubDate") or "").strip()
+                    if title: items.append((title,link,f"{source} • {pub}"))
+            except Exception: pass
+        items=items[:24]
+        Clock.schedule_once(lambda *_:self._apply_news(items),0)
 
-    def _apply_news(self, items):
-        self.news_items = items
-        self._news_loading = False
-        if getattr(self, "on_dashboard", False):
-            self.dashboard()
+    def _apply_news(self,items):
+        self.news_items=items
+        if getattr(self,"on_dashboard",False): self.dashboard()
 
-    def show_news(self, item):
-        title, link, meta = item
-        self.clear(); self.page_title(title, meta)
-        out = self.output(); out.text = f"{title}\n\nSource: {meta}\n\nOpen source: {link}"
-        self.button("OPEN SOURCE", lambda *_: webbrowser.open(link))
-        self.button("BACK HOME", lambda *_: self.dashboard())
+    def show_news_home(self):
+        self.clear(); self.page_title("news",self.tr("latest"))
+        grid=GridLayout(cols=1,spacing=dp(7),size_hint_y=None); grid.bind(minimum_height=grid.setter("height"))
+        for item in getattr(self,"news_items",[]): grid.add_widget(self.card_button("📰",item[0],item[2],lambda item=item:self.show_news(item)))
+        if not self.news_items: grid.add_widget(Label(text=self.tr("loading"),color=self.hex(MUTED),size_hint_y=None,height=dp(50)))
+        sc=ScrollView(); sc.add_widget(grid); self.workspace.add_widget(sc)
+        self.button(self.tr("refresh"),lambda *_:self.refresh_news()); self.button(self.tr("back"),lambda *_:self.dashboard())
+
+    def show_news(self,item):
+        title,link,meta=item; self.clear(); self.page_title(title,meta)
+        out=self.output(); out.text=f"{title}\n\n{self.tr('news_source')}: {meta}\n\n{link}"
+        self.button(self.tr("open_source"),lambda *_:webbrowser.open(link)); self.button(self.tr("back"),lambda *_:self.dashboard())
+
 
     def dashboard(self):
-        self.clear(); self.on_dashboard = True
-        labels = {"uz": ("Bosh sahifa", "Butunjahon biomedical research portal"), "ru": ("Главная", "Глобальный портал биомедицинских исследований"), "en": ("Home", "Global biomedical research portal")}
-        title, sub = labels.get(self.language, labels["uz"])
-        self.page_title(title, sub)
-        self.workspace.add_widget(Label(text="🧬  AI + Bioinformatics + Drug Discovery + Biomedical News", color=self.hex(ACCENT), font_size=15, size_hint_y=None, height=dp(38)))
-        grid = GridLayout(cols=2, spacing=dp(7), size_hint_y=None)
-        grid.bind(minimum_height=grid.setter("height"))
-        for icon, name, cmd in self.modules:
-            grid.add_widget(self.card_button(icon, name, "Open module", cmd))
-        scroll = ScrollView(size_hint_y=None, height=dp(230)); scroll.add_widget(grid); self.workspace.add_widget(scroll)
-        self.workspace.add_widget(Label(text="[b]📰 Latest Biomedical News[/b]", markup=True, color=self.hex(TEXT), font_size=18, size_hint_y=None, height=dp(42)))
-        news_grid = GridLayout(cols=1, spacing=dp(7), size_hint_y=None); news_grid.bind(minimum_height=news_grid.setter("height"))
-        items = getattr(self, "news_items", [])[:8]
-        if not items:
-            news_grid.add_widget(Label(text="Loading global biomedical news...", color=self.hex(MUTED), size_hint_y=None, height=dp(50)))
-        for item in items:
-            news_grid.add_widget(self.card_button("📰", item[0], item[2], lambda item=item: self.show_news(item)))
-        news_scroll = ScrollView(); news_scroll.add_widget(news_grid); self.workspace.add_widget(news_scroll)
-        self.on_dashboard = True
+        self.clear(); self.on_dashboard=True
+        self.page_title("home",self.tr("global"))
+        self.workspace.add_widget(Label(text="🧬  AI • Bioinformatics • Drug Discovery • Research • News",color=self.hex(ACCENT),font_size=15,size_hint_y=None,height=dp(38)))
+        grid=GridLayout(cols=2,spacing=dp(7),size_hint_y=None); grid.bind(minimum_height=grid.setter("height"))
+        for icon,name,cmd in self.modules: grid.add_widget(self.card_button(icon,name,"Open module",cmd))
+        sc=ScrollView(size_hint_y=None,height=dp(250)); sc.add_widget(grid); self.workspace.add_widget(sc)
+        self.workspace.add_widget(Label(text="[b]📰 "+self.tr("latest")+"[/b]",markup=True,color=self.hex(TEXT),font_size=18,size_hint_y=None,height=dp(42)))
+        ng=GridLayout(cols=1,spacing=dp(7),size_hint_y=None); ng.bind(minimum_height=ng.setter("height"))
+        for item in getattr(self,"news_items",[])[:12]: ng.add_widget(self.card_button("📰",item[0],item[2],lambda item=item:self.show_news(item)))
+        if not self.news_items: ng.add_widget(Label(text=self.tr("loading"),color=self.hex(MUTED),size_hint_y=None,height=dp(50)))
+        nsc=ScrollView(); nsc.add_widget(ng); self.workspace.add_widget(nsc)
+        self.on_dashboard=True
+
 
     def bioinformatics(self):
         self.clear()
@@ -669,18 +772,43 @@ class MedGenAI(App):
         self.button("CLEAR", clear_fields)
 
     def virtual_laboratory(self):
-        self.clear()
-        self.page_title("Virtual Laboratory", "Experiment workspace")
-        out = self.output()
-        out.text = (
-            "=== VIRTUAL LABORATORY ===\n\n"
-            "Target → PDB → Pocket → Docking → ML → Report\n\n"
-            "Har bir bosqichni quyidagi tugmalar orqali oching."
-        )
-        self.button("PDB ANALYSIS", lambda x: self.pdb_analysis())
-        self.button("POCKET ANALYSIS", lambda x: self.pocket_analysis())
-        self.button("DOCKING", lambda x: self.docking())
-        self.button("ML + REPORT", lambda x: self.ml_ranking_report())
+        self.clear(); self.page_title("virtual","Target → PDB → Pocket → Docking → ML → Report")
+        self.workspace.add_widget(Label(text="Interactive 2D / 3D molecular workspace",color=self.hex(MUTED),size_hint_y=None,height=dp(35)))
+        path=TextInput(hint_text=self.tr("pdb_path"),multiline=False,background_color=self.hex(INPUT),foreground_color=self.hex(TEXT),size_hint_y=None,height=dp(46))
+        self.workspace.add_widget(path)
+        viewer=Molecule3DView(size_hint_y=None,height=dp(330)); self.workspace.add_widget(viewer)
+        status=Label(text="3D viewer ready — drag to rotate",color=self.hex(MUTED),size_hint_y=None,height=dp(32)); self.workspace.add_widget(status)
+        def load_demo(*_):
+            import math
+            atoms=[]
+            for i in range(34):
+                t=i*0.55; atoms.append((math.cos(t)*4, math.sin(t)*4, i*0.45-7, 'C'))
+            viewer.set_atoms(atoms); status.text="Demo molecular model • drag to rotate"
+        def load_pdb(*_):
+            try:
+                fn=path.text.strip()
+                if not os.path.isfile(fn): status.text="PDB file not found"; return
+                atoms=[]
+                with open(fn,encoding="utf-8",errors="ignore") as f:
+                    for line in f:
+                        if line.startswith("ATOM") and line[12:16].strip() in ("CA","C","N","O"):
+                            atoms.append((float(line[30:38]),float(line[38:46]),float(line[46:54]),line[76:78].strip() or "C"))
+                if atoms:
+                    # center and scale
+                    cx=sum(a[0] for a in atoms)/len(atoms); cy=sum(a[1] for a in atoms)/len(atoms); cz=sum(a[2] for a in atoms)/len(atoms)
+                    m=max(max(abs(a[0]-cx),abs(a[1]-cy),abs(a[2]-cz)) for a in atoms) or 1
+                    viewer.scale=min(9,180/m); viewer.set_atoms([(a[0]-cx,a[1]-cy,a[2]-cz,a[3]) for a in atoms[:600]])
+                    status.text=f"Loaded {min(len(atoms),600)} atoms • drag to rotate"
+                else: status.text="No supported ATOM records found"
+            except Exception as ex: status.text=f"PDB error: {ex}"
+        self.button(self.tr("demo"),load_demo)
+        self.button(self.tr("load_pdb"),load_pdb)
+        self.button("PDB ANALYSIS",lambda *_:self.pdb_analysis())
+        self.button("POCKET ANALYSIS",lambda *_:self.pocket_analysis())
+        self.button("DOCKING",lambda *_:self.docking())
+        self.button("ML + REPORT",lambda *_:self.ml_ranking_report())
+        load_demo()
+
 
     def research_assistant(self):
         self.clear()
