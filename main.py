@@ -154,7 +154,7 @@ class MedGenAI(App):
             root.add_widget(self.workspace)
 
             # 6. Diagnostic status
-            try:
+try:
     self.dashboard()
 
     Clock.schedule_once(
