@@ -105,17 +105,17 @@ class Molecule3DView(Widget):
 
 class MedGenAI(App):
 
-    def build(self):
-    from kivy.uix.label import Label
+        def build(self):
+        from kivy.uix.label import Label
 
-    self.title = "MedGen AI"
+        self.title = "MedGen AI"
 
-    return Label(
-        text="MEDGEN AI\n\nORIGINAL CODE LOADED\n\nBUILD OK",
-        font_size=25,
-        halign="center",
-        valign="middle"
-    )
+        return Label(
+            text="MEDGEN AI\n\nORIGINAL CODE LOADED\n\nBUILD OK",
+            font_size=25,
+            halign="center",
+            valign="middle"
+        )
 
     def _install_exception_hook(self):
         import sys
