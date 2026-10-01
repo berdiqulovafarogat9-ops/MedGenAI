@@ -104,18 +104,111 @@ class Molecule3DView(Widget):
 
 
 class MedGenAI(App):
-
     def build(self):
-        from kivy.uix.label import Label
+        global HISTORY_FILE
 
-        self.title = "MedGen AI"
+        try:
+            # 1. App storage
+            HISTORY_FILE = os.path.join(
+                self.user_data_dir,
+                "medgen_history.json"
+            )
 
-        return Label(
-            text="MEDGEN AI\n\nORIGINAL CODE LOADED\n\nBUILD OK",
-            font_size=25,
-            halign="center",
-            valign="middle"
-        )
+            # 2. Basic app settings
+            self.title = "MedGen AI"
+            self.language = "uz"
+
+            # 3. Create root UI
+            root = BoxLayout(
+                orientation="vertical",
+                spacing=dp(8),
+                padding=dp(8)
+            )
+
+            # 4. Header
+            header = BoxLayout(
+                orientation="horizontal",
+                size_hint_y=None,
+                height=dp(55),
+                spacing=dp(6)
+            )
+
+            title = Label(
+                text="MEDGEN AI",
+                font_size=22,
+                bold=True,
+                halign="left",
+                valign="middle"
+            )
+
+            header.add_widget(title)
+
+            root.add_widget(header)
+
+            # 5. Workspace
+            self.workspace = BoxLayout(
+                orientation="vertical",
+                spacing=dp(8)
+            )
+
+            root.add_widget(self.workspace)
+
+            # 6. Diagnostic status
+            self.workspace.add_widget(
+                Label(
+                    text=(
+                        "MEDGEN AI\n\n"
+                        "CORE BUILD OK\n\n"
+                        "STORAGE: OK\n"
+                        "ROOT UI: OK\n"
+                        "HEADER: OK\n"
+                        "WORKSPACE: OK\n\n"
+                        "DASHBOARD TEST"
+                    ),
+                    font_size=22,
+                    halign="center",
+                    valign="middle"
+                )
+            )
+
+            return root
+
+        except Exception as exc:
+            import traceback
+
+            error_text = traceback.format_exc()
+
+            try:
+                self.workspace.clear_widgets()
+            except Exception:
+                pass
+
+            try:
+                root = BoxLayout(
+                    orientation="vertical",
+                    padding=dp(10)
+                )
+
+                root.add_widget(
+                    Label(
+                        text="MEDGEN AI STARTUP ERROR",
+                        font_size=22
+                    )
+                )
+
+                root.add_widget(
+                    TextInput(
+                        text=error_text,
+                        readonly=True,
+                        multiline=True,
+                        font_size=13
+                    )
+                )
+
+                return root
+
+            except Exception:
+                raise
 
     def _install_exception_hook(self):
         import sys
