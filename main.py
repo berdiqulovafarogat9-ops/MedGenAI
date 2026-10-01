@@ -154,22 +154,43 @@ class MedGenAI(App):
             root.add_widget(self.workspace)
 
             # 6. Diagnostic status
-            self.workspace.add_widget(
-                Label(
-                    text=(
-                        "MEDGEN AI\n\n"
-                        "CORE BUILD OK\n\n"
-                        "STORAGE: OK\n"
-                        "ROOT UI: OK\n"
-                        "HEADER: OK\n"
-                        "WORKSPACE: OK\n\n"
-                        "DASHBOARD TEST"
-                    ),
-                    font_size=22,
-                    halign="center",
-                    valign="middle"
-                )
-            )
+            try:
+    self.dashboard()
+
+    Clock.schedule_once(
+        lambda *_: self.refresh_news(),
+        0.5
+    )
+
+    Clock.schedule_interval(
+        lambda *_: self.refresh_news(),
+        3600
+    )
+
+except Exception:
+    import traceback
+
+    error_text = traceback.format_exc()
+
+    self.workspace.clear_widgets()
+
+    self.workspace.add_widget(
+        Label(
+            text="MEDGEN AI DASHBOARD ERROR",
+            font_size=22,
+            size_hint_y=None,
+            height=dp(70)
+        )
+    )
+
+    self.workspace.add_widget(
+        TextInput(
+            text=error_text,
+            readonly=True,
+            multiline=True,
+            font_size=13
+        )
+    )
 
             return root
 
