@@ -24,7 +24,7 @@ fullscreen = 0
 
 # Android
 android.api = 35
-android.minapi = 24
+android.minapi = 26
 android.ndk_api = 26
 android.archs = arm64-v8a
 
@@ -34,7 +34,7 @@ android.permissions = INTERNET
 # Android SDK license
 android.accept_sdk_license = True
 
-# Stable p4a branch
+# Stable python-for-android
 p4a.branch = master
 
 
