@@ -153,83 +153,21 @@ class MedGenAI(App):
 
             root.add_widget(self.workspace)
 
-            # 6. Diagnostic status
-try:
-    self.dashboard()
+            # 6. Dashboard
+        self.dashboard()
 
-    Clock.schedule_once(
-        lambda *_: self.refresh_news(),
-        0.5
-    )
-
-    Clock.schedule_interval(
-        lambda *_: self.refresh_news(),
-        3600
-    )
-
-except Exception:
-    import traceback
-
-    error_text = traceback.format_exc()
-
-    self.workspace.clear_widgets()
-
-    self.workspace.add_widget(
-        Label(
-            text="MEDGEN AI DASHBOARD ERROR",
-            font_size=22,
-            size_hint_y=None,
-            height=dp(70)
+        Clock.schedule_once(
+            lambda *_: self.refresh_news(),
+            0.5
         )
-    )
 
-    self.workspace.add_widget(
-        TextInput(
-            text=error_text,
-            readonly=True,
-            multiline=True,
-            font_size=13
+        Clock.schedule_interval(
+            lambda *_: self.refresh_news(),
+            3600
         )
-    )
 
-            return root
-
-        except Exception as exc:
-            import traceback
-
-            error_text = traceback.format_exc()
-
-            try:
-                self.workspace.clear_widgets()
-            except Exception:
-                pass
-
-            try:
-                root = BoxLayout(
-                    orientation="vertical",
-                    padding=dp(10)
-                )
-
-                root.add_widget(
-                    Label(
-                        text="MEDGEN AI STARTUP ERROR",
-                        font_size=22
-                    )
-                )
-
-                root.add_widget(
-                    TextInput(
-                        text=error_text,
-                        readonly=True,
-                        multiline=True,
-                        font_size=13
-                    )
-                )
-
-                return root
-
-            except Exception:
-                raise
+        return root
+            
 
     def _install_exception_hook(self):
         import sys
