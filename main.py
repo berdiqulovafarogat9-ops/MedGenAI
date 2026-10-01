@@ -143,9 +143,108 @@ class MedGenAI(App):
 
         self.workspace = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(8))
         root.add_widget(self.workspace)
-        self.dashboard()
-        Clock.schedule_once(lambda *_: self.refresh_news(), 0.5)
-        Clock.schedule_interval(lambda *_: self.refresh_news(), 3600)
+                # ============================================================
+        # MEDGEN AI — STARTUP DIAGNOSTIC MODE
+        # ============================================================
+
+        try:
+            self.dashboard()
+
+        except Exception as exc:
+            import traceback
+
+            error_text = traceback.format_exc()
+
+            # Save detailed startup crash log
+            try:
+                crash_path = os.path.join(
+                    self.user_data_dir,
+                    "startup_crash.log"
+                )
+
+                with open(
+                    crash_path,
+                    "a",
+                    encoding="utf-8"
+                ) as crash_file:
+
+                    crash_file.write(
+                        "\n\n"
+                        "==================================================\n"
+                    )
+                    crash_file.write(
+                        "MEDGEN AI STARTUP CRASH\n"
+                    )
+                    crash_file.write(
+                        "==================================================\n"
+                    )
+                    crash_file.write(error_text)
+                    crash_file.write(
+                        "\n==================================================\n"
+                    )
+
+            except Exception:
+                pass
+
+            # Show the error directly on the tablet screen
+            try:
+                self.workspace.clear_widgets()
+
+                title = Label(
+                    text="[b]MEDGEN AI STARTUP ERROR[/b]",
+                    markup=True,
+                    color=self.hex(ACCENT),
+                    font_size=22,
+                    size_hint_y=None,
+                    height=dp(65)
+                )
+
+                self.workspace.add_widget(title)
+
+                error_scroll = ScrollView(
+                    size_hint=(1, 1)
+                )
+
+                error_view = TextInput(
+                    text=(
+                        "MEDGEN AI ishga tushishda xatoga uchradi.\n\n"
+                        "Quyidagi xato ma'lumotini screenshot qiling:\n\n"
+                        "--------------------------------------------------\n\n"
+                        + error_text
+                    ),
+                    readonly=True,
+                    multiline=True,
+                    background_color=self.hex(INPUT),
+                    foreground_color=self.hex(TEXT),
+                    cursor_color=self.hex(TEXT),
+                    font_size=13
+                )
+
+                error_scroll.add_widget(error_view)
+                self.workspace.add_widget(error_scroll)
+
+            except Exception:
+                # Last-resort fallback
+                try:
+                    print(error_text)
+                except Exception:
+                    pass
+
+        # News must not prevent the application from starting.
+        try:
+            Clock.schedule_once(
+                lambda *_: self.refresh_news(),
+                0.5
+            )
+
+            Clock.schedule_interval(
+                lambda *_: self.refresh_news(),
+                3600
+            )
+
+        except Exception:
+            pass
+
         return root
 
     def _install_exception_hook(self):
