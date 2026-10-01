@@ -1,44 +1,68 @@
 [app]
 
-# Application
+# (str) Title of your application
 title = MedGen AI
+
+# (str) Package name
 package.name = medgenai
+
+# (str) Package domain
 package.domain = org.medgenai
 
-# Source
+# (str) Source code directory
 source.dir = .
+
+# (list) Source file extensions
 source.include_exts = py,json,png,jpg,kv,txt
 
-# Version
+# (str) Application version
 version = 1.1
 
-# Icon
+# (str) Application icon
 icon.filename = medgen_ai_icon.png
 
-# Python / Kivy
-requirements = python3==3.12.9,hostpython3==3.12.9,kivy==2.3.1
+# (str) Python/Kivy requirements
+requirements = python3,kivy==2.3.0
 
-# Orientation
+# (str) Orientation
 orientation = portrait
+
+# (bool) Fullscreen
 fullscreen = 0
 
-# Android
+# (str) Android API
 android.api = 35
-android.minapi = 26
-android.ndk_api = 26
+
+# (str) Minimum Android API
+android.minapi = 24
+
+# (str) Android architectures
 android.archs = arm64-v8a
 
-# Permissions
+# (list) Android permissions
 android.permissions = INTERNET
 
-# Android SDK license
+# (bool) Accept Android SDK license
 android.accept_sdk_license = True
 
-# Stable python-for-android
+
+# --------------------------------------------------
+# Python-for-Android configuration
+# --------------------------------------------------
+
+# Use a stable p4a release instead of current develop
+p4a.url = https://github.com/kivy/python-for-android.git
 p4a.branch = master
+p4a.commit = v2024.01.21
+
+# SDL2 bootstrap for Kivy
+p4a.bootstrap = sdl2
 
 
 [buildozer]
 
+# Buildozer log level
 log_level = 2
+
+# Warn when running as root
 warn_on_root = 1
