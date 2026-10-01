@@ -105,7 +105,7 @@ class Molecule3DView(Widget):
 
 class MedGenAI(App):
 
-        def build(self):
+    def build(self):
         from kivy.uix.label import Label
 
         self.title = "MedGen AI"
