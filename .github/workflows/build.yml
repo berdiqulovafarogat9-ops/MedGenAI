@@ -4,47 +4,30 @@ on:
   workflow_dispatch:
 
 jobs:
-
   build:
-
     runs-on: ubuntu-22.04
 
     steps:
 
-      # --------------------------------------------------
-      # 1. Checkout
-      # --------------------------------------------------
-
-      - name: Checkout repository
+      # 1. GitHub repository'ni yuklash
+      - name: Checkout
         uses: actions/checkout@v4
 
-
-      # --------------------------------------------------
-      # 2. Python 3.11
-      # --------------------------------------------------
-
+      # 2. Python
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-
-      # --------------------------------------------------
-      # 3. Java 17
-      # --------------------------------------------------
-
+      # 3. Java
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           java-version: "17"
           distribution: "temurin"
 
-
-      # --------------------------------------------------
-      # 4. Android / Build dependencies
-      # --------------------------------------------------
-
-      - name: Install system dependencies
+      # 4. Android / Buildozer uchun system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
 
@@ -57,99 +40,66 @@ jobs:
             libtool \
             libtool-bin \
             pkg-config \
+            gettext \
+            autopoint \
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
             cmake \
             libffi-dev \
             libssl-dev \
-            gettext \
-            libltdl-dev
+            liblzma-dev
 
-
-      # --------------------------------------------------
-      # 5. Python build tools
-      # --------------------------------------------------
-
-      - name: Upgrade pip
-        run: |
-          python -m pip install --upgrade pip
-          python --version
-          pip --version
-
-
-      # --------------------------------------------------
-      # 6. Install Buildozer
-      # --------------------------------------------------
-
+      # 5. Buildozer
       - name: Install Buildozer
         run: |
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install buildozer
-          buildozer --version
+          python -m pip install "cython==0.29.34"
 
-
-      # --------------------------------------------------
-      # 7. Show build configuration
-      # --------------------------------------------------
-
-      - name: Show build configuration
+      # 6. Tekshirish
+      - name: Check Build Configuration
         run: |
-          echo "========== PYTHON =========="
+          echo "Python:"
           python --version
 
-          echo "========== JAVA =========="
+          echo "Java:"
           java -version
 
-          echo "========== BUILDOZER =========="
+          echo "Buildozer:"
           buildozer --version
 
-          echo "========== BUILDOZER SPEC =========="
-          cat buildozer.spec
+          echo "Project files:"
+          ls -la
 
+          echo "Buildozer spec:"
+          test -f buildozer.spec
 
-      # --------------------------------------------------
-      # 8. Clean previous build
-      # --------------------------------------------------
+          echo "Main Python:"
+          test -f main.py
 
-      - name: Clean Buildozer
-        run: |
-          buildozer android clean || true
-          rm -rf .buildozer
-          rm -rf bin
+          echo "Icon:"
+          test -f medgen_ai_icon.png
 
-
-      # --------------------------------------------------
-      # 9. Build APK
-      # --------------------------------------------------
-
+      # 7. APK build
       - name: Build APK
         run: |
           buildozer -v android debug
 
-
-      # --------------------------------------------------
-      # 10. Check APK
-      # --------------------------------------------------
-
+      # 8. APK mavjudligini tekshirish
       - name: Check APK
+        if: success()
         run: |
-          echo "========== APK FILES =========="
+          echo "APK files:"
           ls -lah bin/
 
-          echo "========== APK CHECK =========="
-          test -n "$(find bin -name '*.apk' -print -quit)"
+          test -n "$(find bin -name '*.apk' -type f)"
 
-          echo "APK BUILD SUCCESS"
-
-
-      # --------------------------------------------------
-      # 11. Upload APK
-      # --------------------------------------------------
-
+      # 9. APK'ni artifact sifatida saqlash
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
-
         with:
-          name: MedGenAI-Diagnostic-APK
+          name: MedGenAI-APK
           path: bin/*.apk
+          if-no-files-found: error
