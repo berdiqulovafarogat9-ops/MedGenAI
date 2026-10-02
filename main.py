@@ -107,7 +107,6 @@ class MedGenAI(App):
     def build(self):
         global HISTORY_FILE
 
-        try:
             # 1. App storage
             HISTORY_FILE = os.path.join(
                 self.user_data_dir,
