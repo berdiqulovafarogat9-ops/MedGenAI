@@ -105,7 +105,7 @@ class Molecule3DView(Widget):
 
 class MedGenAI(App):
     def build(self):
-        global HISTORY_FILE
+            global HISTORY_FILE
 
             # 1. App storage
             HISTORY_FILE = os.path.join(
