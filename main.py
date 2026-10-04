@@ -142,30 +142,31 @@ class MedGenAI(App):
 
             header.add_widget(title)
 
-            root.add_widget(header)
-
+            root.add_widget(header)        
+        
             # 5. Workspace
             self.workspace = BoxLayout(
-                orientation="vertical",
-                spacing=dp(8)
+            orientation="vertical",
+            spacing=dp(8)
             )
 
             root.add_widget(self.workspace)
 
             # 6. Dashboard
-        self.dashboard()
+            self.dashboard()
 
-        Clock.schedule_once(
+            Clock.schedule_once(
             lambda *_: self.refresh_news(),
             0.5
-        )
+            )
 
-        Clock.schedule_interval(
+            Clock.schedule_interval(
             lambda *_: self.refresh_news(),
             3600
-        )
+            )
 
-        return root
+            return root
+        
             
 
     def _install_exception_hook(self):
