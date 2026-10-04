@@ -22,7 +22,7 @@ version = 1.1
 icon.filename = medgen_ai_icon.png
 
 # (str) Python/Kivy requirements
-requirements = python3,kivy==2.3.0,liblzma
+requirements = python3,kivy==2.3.1,liblzma
 
 # (str) Orientation
 orientation = portrait
