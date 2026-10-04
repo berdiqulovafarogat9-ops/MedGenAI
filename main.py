@@ -165,8 +165,7 @@ class MedGenAI(App):
             3600
             )
 
-        return root
-            
+            return root
 
     def _install_exception_hook(self):
         import sys
@@ -175,7 +174,14 @@ class MedGenAI(App):
             try:
                 log_path = os.path.join(self.user_data_dir, "crash.log")
                 with open(log_path, "a", encoding="utf-8") as f:
-                    traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
+                    traceback.print_exception(
+                        exc_type,
+                        exc_value,
+                        exc_tb,
+                        file=f
+                    )
+
+            
             except Exception:
                 pass
         sys.excepthook = handle
