@@ -109,8 +109,8 @@ class MedGenAI(App):
 
             # 1. App storage
             HISTORY_FILE = os.path.join(
-                self.user_data_dir,
-                "medgen_history.json"
+            self.user_data_dir,
+            "medgen_history.json"
             )
 
             # 2. Basic app settings
