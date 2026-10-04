@@ -153,19 +153,25 @@ class MedGenAI(App):
             root.add_widget(self.workspace)
 
             # 6. Dashboard
-            self.dashboard()
+            self.workspace.clear_widgets()
 
-            Clock.schedule_once(
-            lambda *_: self.refresh_news(),
-            0.5
+            self.workspace.add_widget(
+            Label(
+                text=(
+                    "MEDGEN AI\n\n"
+                    "CORE BUILD OK\n\n"
+                    "DASHBOARD TEST: OFF\n\n"
+                    "KIVY: OK\n"
+                    "STORAGE: OK\n"
+                    "ROOT UI: OK"
+                ),
+                font_size=25,
+                halign="center",
+                valign="middle"
             )
+        )
 
-            Clock.schedule_interval(
-            lambda *_: self.refresh_news(),
-            3600
-            )
-
-            return root
+        return root
 
     def _install_exception_hook(self):
         import sys
