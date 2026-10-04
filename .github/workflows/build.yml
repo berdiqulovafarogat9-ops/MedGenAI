@@ -82,6 +82,11 @@ jobs:
           test -f medgen_ai_icon.png
 
       # 7. APK build
+      - name: Clean Build
+        run: |
+          rm -rf .buildozer
+          rm -rf ~/.buildozer
+
       - name: Build APK
         run: |
           buildozer -v android debug
