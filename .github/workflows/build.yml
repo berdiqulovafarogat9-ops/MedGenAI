@@ -97,10 +97,23 @@ jobs:
 
           echo "APK BUILD: PASS"
 
-      # 10. Install Android emulator tools
+      # 10. Setup Android SDK tools
       - name: Setup Android SDK
         if: success()
         run: |
+          export ANDROID_HOME="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          which adb || true
+          which sdkmanager || true
+          which avdmanager || true
+          which emulator || true
+
+          sdkmanager --version
+
           yes | sdkmanager --licenses || true
 
           sdkmanager \
