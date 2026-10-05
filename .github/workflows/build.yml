@@ -9,7 +9,7 @@ jobs:
 
     steps:
 
-      # 1. GitHub repository'ni yuklash
+      # 1. Repository
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -26,7 +26,7 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      # 4. Android / Buildozer uchun system dependencies
+      # 4. System dependencies
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -50,57 +50,73 @@ jobs:
             libssl-dev \
             liblzma-dev
 
-      # 5. Buildozer
-      - name: Install Buildozer
+      # 5. Python build tools
+      - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "cython==0.29.34"
           python -m pip install buildozer
-          python -m pip install buildozer "cython==0.29.34"
 
-      # 6. Tekshirish
+      # 6. Check environment
       - name: Check Build Configuration
         run: |
-          echo "Python:"
+          echo "=============================="
+          echo "Python"
           python --version
 
-          echo "Java:"
+          echo "=============================="
+          echo "Java"
           java -version
 
-          echo "Buildozer:"
+          echo "=============================="
+          echo "Cython"
+          cython --version
+
+          echo "=============================="
+          echo "Buildozer"
           buildozer --version
 
-          echo "Project files:"
+          echo "=============================="
+          echo "Project files"
           ls -la
 
-          echo "Buildozer spec:"
+          echo "=============================="
+          echo "Required files"
+
           test -f buildozer.spec
-
-          echo "Main Python:"
           test -f main.py
-
-          echo "Icon:"
           test -f medgen_ai_icon.png
 
-      # 7. APK build
-      - name: Clean Build
+          echo "CONFIGURATION CHECK: PASS"
+
+      # 7. Clean previous build/cache
+      - name: Clean Buildozer Cache
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
 
+          echo "BUILD CACHE CLEANED"
+
+      # 8. Build APK
       - name: Build APK
         run: |
           buildozer -v android debug
 
-      # 8. APK mavjudligini tekshirish
+      # 9. Check APK
       - name: Check APK
         if: success()
         run: |
-          echo "APK files:"
+          echo "=============================="
+          echo "APK FILES"
+          echo "=============================="
+
           ls -lah bin/
 
           test -n "$(find bin -name '*.apk' -type f)"
 
-      # 9. APK'ni artifact sifatida saqlash
+          echo "APK BUILD: PASS"
+
+      # 10. Upload APK
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
