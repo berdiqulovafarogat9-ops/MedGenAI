@@ -26,7 +26,7 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      # 4. System dependencies
+      # 4. Android system dependencies
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -51,46 +51,30 @@ jobs:
             liblzma-dev
 
       # 5. Python build tools
-      - name: Install Python build tools
+      - name: Install Build Tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install "cython==0.29.34"
           python -m pip install buildozer
 
-      # 6. Check environment
-      - name: Check Build Configuration
+      # 6. Check project
+      - name: Check Project
         run: |
-          echo "=============================="
-          echo "Python"
           python --version
-
-          echo "=============================="
-          echo "Java"
           java -version
-
-          echo "=============================="
-          echo "Cython"
           cython --version
-
-          echo "=============================="
-          echo "Buildozer"
           buildozer --version
-
-          echo "=============================="
-          echo "Project files"
-          ls -la
-
-          echo "=============================="
-          echo "Required files"
 
           test -f buildozer.spec
           test -f main.py
           test -f medgen_ai_icon.png
 
-          echo "CONFIGURATION CHECK: PASS"
+          python -m py_compile main.py
 
-      # 7. Clean previous build/cache
-      - name: Clean Buildozer Cache
+          echo "PROJECT CHECK: PASS"
+
+      # 7. Clean Buildozer
+      - name: Clean Build
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
@@ -106,17 +90,140 @@ jobs:
       - name: Check APK
         if: success()
         run: |
-          echo "=============================="
-          echo "APK FILES"
-          echo "=============================="
-
+          echo "=== APK FILES ==="
           ls -lah bin/
 
           test -n "$(find bin -name '*.apk' -type f)"
 
           echo "APK BUILD: PASS"
 
-      # 10. Upload APK
+      # 10. Install Android emulator tools
+      - name: Setup Android SDK
+        if: success()
+        run: |
+          yes | sdkmanager --licenses || true
+
+          sdkmanager \
+            "platform-tools" \
+            "emulator" \
+            "platforms;android-35" \
+            "system-images;android-35;google_apis;arm64-v8a"
+
+      # 11. Create emulator
+      - name: Create Emulator
+        if: success()
+        run: |
+          echo "no" | avdmanager create avd \
+            -n medgen-test \
+            -k "system-images;android-35;google_apis;arm64-v8a" \
+            --force
+
+      # 12. Start emulator
+      - name: Start Emulator
+        if: success()
+        run: |
+          nohup emulator \
+            -avd medgen-test \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -gpu swiftshader_indirect \
+            > emulator.log 2>&1 &
+
+          echo $! > emulator.pid
+
+      # 13. Wait for emulator
+      - name: Wait for Emulator
+        if: success()
+        run: |
+          adb wait-for-device
+
+          for i in {1..60}; do
+            BOOT=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+
+            if [ "$BOOT" = "1" ]; then
+              echo "ANDROID EMULATOR: READY"
+              break
+            fi
+
+            echo "Waiting for Android..."
+            sleep 5
+          done
+
+          adb devices
+
+      # 14. Install APK
+      - name: Install APK
+        if: success()
+        run: |
+          APK=$(find bin -name "*.apk" -type f | head -1)
+
+          echo "Installing:"
+          echo "$APK"
+
+          adb install -r "$APK"
+
+      # 15. Start MedGen AI
+      - name: Start MedGen AI
+        if: success()
+        run: |
+          adb shell am force-stop org.medgenai.medgenai
+
+          adb shell monkey \
+            -p org.medgenai.medgenai \
+            -c android.intent.category.LAUNCHER \
+            1
+
+          sleep 15
+
+      # 16. Collect runtime information
+      - name: Collect Android Crash Log
+        if: always()
+        run: |
+          echo "=============================="
+          echo "ADB DEVICES"
+          echo "=============================="
+          adb devices || true
+
+          echo "=============================="
+          echo "PACKAGE"
+          echo "=============================="
+          adb shell dumpsys package org.medgenai.medgenai || true
+
+          echo "=============================="
+          echo "LOGCAT"
+          echo "=============================="
+          adb logcat -d -v time > logcat.txt || true
+
+          echo "=============================="
+          echo "MEDGENAI LOG"
+          echo "=============================="
+
+          grep -iE \
+            "medgenai|python|kivy|fatal|exception|crash|error|abort|signal" \
+            logcat.txt \
+            | tail -500 \
+            || true
+
+          echo "=============================="
+          echo "EMULATOR LOG"
+          echo "=============================="
+
+          cat emulator.log || true
+
+      # 17. Save diagnostics
+      - name: Upload Diagnostic Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MedGenAI-Android-Diagnostics
+          path: |
+            logcat.txt
+            emulator.log
+            bin/*.apk
+          if-no-files-found: warn
+
+      # 18. Upload APK separately
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
