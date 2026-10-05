@@ -105,57 +105,56 @@ class Molecule3DView(Widget):
 
 class MedGenAI(App):
     def build(self):
-            global HISTORY_FILE
+        global HISTORY_FILE
 
-            # 1. App storage
-            HISTORY_FILE = os.path.join(
+        # 1. App storage
+        HISTORY_FILE = os.path.join(
             self.user_data_dir,
             "medgen_history.json"
-            )
+        )
 
-            # 2. Basic app settings
-            self.title = "MedGen AI"
-            self.language = "uz"
+        # 2. Basic app settings
+        self.title = "MedGen AI"
+        self.language = "uz"
 
-            # 3. Create root UI
-            root = BoxLayout(
-                orientation="vertical",
-                spacing=dp(8),
-                padding=dp(8)
-            )
+        # 3. Create root UI
+        root = BoxLayout(
+            orientation="vertical",
+            spacing=dp(8),
+            padding=dp(8)
+        )
 
-            # 4. Header
-            header = BoxLayout(
-                orientation="horizontal",
-                size_hint_y=None,
-                height=dp(55),
-                spacing=dp(6)
-            )
+        # 4. Header
+        header = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(55),
+            spacing=dp(6)
+        )
 
-            title = Label(
-                text="MEDGEN AI",
-                font_size=22,
-                bold=True,
-                halign="left",
-                valign="middle"
-            )
+        title = Label(
+            text="MEDGEN AI",
+            font_size=22,
+            bold=True,
+            halign="left",
+            valign="middle"
+        )
 
-            header.add_widget(title)
+        header.add_widget(title)
+        root.add_widget(header)
 
-            root.add_widget(header)        
-        
-            # 5. Workspace
-            self.workspace = BoxLayout(
+        # 5. Workspace
+        self.workspace = BoxLayout(
             orientation="vertical",
             spacing=dp(8)
-            )
+        )
 
-            root.add_widget(self.workspace)
+        root.add_widget(self.workspace)
 
-            # 6. Dashboard
-            self.workspace.clear_widgets()
+        # 6. Dashboard diagnostic
+        self.workspace.clear_widgets()
 
-            self.workspace.add_widget(
+        self.workspace.add_widget(
             Label(
                 text=(
                     "MEDGEN AI\n\n"
@@ -172,6 +171,8 @@ class MedGenAI(App):
         )
 
         return root
+
+    def _install_exception_hook(self):
 
     def _install_exception_hook(self):
         import sys
