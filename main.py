@@ -173,8 +173,6 @@ class MedGenAI(App):
         return root
 
     def _install_exception_hook(self):
-
-    def _install_exception_hook(self):
         import sys
         import traceback
         def handle(exc_type, exc_value, exc_tb):
